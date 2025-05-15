@@ -1,0 +1,9 @@
+# Ignore build artifacts and generated files
+tarawasm
+tarawasm.build
+tarawasm.dist
+tarawasm.onefile-build
+
+# Python cache
+env/
+__pycache__/
