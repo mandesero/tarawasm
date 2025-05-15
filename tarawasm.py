@@ -63,7 +63,8 @@ def init(world, lang, wasm_file, wit_dir, src_file):
         'world': world,
         'lang': lang,
         'wit_path': str(wit_output),
-        'src_file': src
+        'src_file': src,
+        'wasm_file': wasm_file,
     }
     Path(CONFIG_FILE).write_text(json.dumps(conf, indent=2))
     click.echo(f"Configuration saved to '{CONFIG_FILE}'")
@@ -139,6 +140,7 @@ def build(ctx):
     world = conf['world']
     src = conf['src_file']
     wit_path = conf['wit_path']
+    wasm_file = conf['wasm_file']
     cfg = LANG_CFGS[lang]
     click.echo(f"Building {lang} component for world '{world}' from '{src}' with WIT path '{wit_path}'...")
     if lang == 'python':
@@ -155,7 +157,7 @@ def build(ctx):
             'tinygo', 'build',
             f"-target={cfg['tinygo-target']}",
             '-o', f"{world}.wasm",
-            '--wit-package', f"docs:{world}@0.1.0.wasm",
+            '--wit-package', wasm_file,
             '--wit-world', world,
             src
         ], check=True)
