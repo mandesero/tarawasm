@@ -23,7 +23,12 @@ LANG_CFGS = {
     'js': {
         'wit-flag': '--wit',
         'default-src': 'main.js'
-    }
+    },
+    'rust': {
+        'default-src': None,               # Rust uses Cargo workspace, not a single src file
+        'cargo-component': 'cargo',
+        'release-target': 'wasm32-wasip1'
+  }
 }
 
 class ConfigError(Exception):
@@ -56,10 +61,27 @@ def init(world, lang, wasm_file, wit_dir, src_file):
     wasm_path = Path(wasm_file)
     if not wasm_path.exists():
         raise click.ClickException(f"WASM file '{wasm_file}' not found")
-    wit_output = Path(wit_dir)
-    wit_output.mkdir(parents=True, exist_ok=True)
-    out_wit = wit_output / f"{world}.wit"
-    click.echo(f"Extracting WIT from '{wasm_file}' to '{out_wit}'...")
+
+    if lang == 'rust':
+        subprocess.run(['cargo', 'component', 'new', '--lib', world], check=True)
+        src_dir = Path(world)
+        for item in src_dir.iterdir():
+            target = Path('.') / item.name
+            if target.exists():
+                if target.is_dir():
+                    shutil.rmtree(target)
+                else:
+                    target.unlink()
+            shutil.move(str(item), str(target))
+        src_dir.rmdir()
+        wit_output = Path('./wit')
+        out_wit = wit_output / f"world.wit"
+    else:
+        wit_output = Path(wit_dir)
+        wit_output.mkdir(parents=True, exist_ok=True)
+        out_wit = wit_output / f"{world}.wit"
+
+    click.echo(f"Extracting WIT from '{wasm_file}' to '{out_wit}'...")    
     with open(out_wit, 'w') as f:
         subprocess.run(['wasm-tools', 'component', 'wit', str(wasm_path)], check=True, stdout=f)
     # Save config
@@ -93,6 +115,10 @@ def clean(ctx):
                 if item.is_dir(): shutil.rmtree(item, ignore_errors=True)
                 else: item.unlink()
         click.echo("Cleaned Go artifacts")
+    elif lang == 'rust':
+        target_dir = Path("target")
+        if target_dir.exists() and target_dir.is_dir():
+            shutil.rmtree(target_dir)
     else:
         click.echo(f"Clean not implemented for {lang}")
 
@@ -136,6 +162,9 @@ def bind(ctx):
             wit_path
         ], check=True)
         click.echo("JS guest types generated")
+    elif lang == 'rust':
+        subprocess.run(['cargo', 'component', 'bindings'], check=True)
+        click.echo("Rust guest types generated")
     else:
         click.echo(f"Bind not implemented for {lang}")
 
@@ -183,6 +212,14 @@ def build(ctx):
             '--disable', 'http'
         ], check=True)
         click.echo("JS component built")
+    elif lang == 'rust':
+        subprocess.run(['cargo', 'component', 'build', '--release'], check=True)
+        src = Path("target/wasm32-wasip1/release") / f"{world}.wasm"
+        dst = Path(".")
+        if src.exists():
+            shutil.move(str(src), str(dst))
+        else:
+            raise click.ClickException(f"WASM file '{src}' not found")
     else:
         click.echo(f"Build not implemented for {lang}")
 
