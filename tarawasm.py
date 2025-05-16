@@ -5,7 +5,7 @@ import json
 import click
 
 # Configuration file path
-CONFIG_FILE = 'wasmcraft.json'
+CONFIG_FILE = 'tarawasm.json'
 
 # Supported languages and defaults
 LANG_CFGS = {
@@ -19,6 +19,10 @@ LANG_CFGS = {
         'bindgen-cmd': 'wit-bindgen-go',
         'tinygo-target': 'wasip2',
         'default-src': 'main.go'
+    },
+    'js': {
+        'wit-flag': '--wit',
+        'default-src': 'main.js'
     }
 }
 
@@ -83,7 +87,7 @@ def clean(ctx):
     if lang == 'python':
         shutil.rmtree(world, ignore_errors=True)
         click.echo(f"Removed directory '{world}'")
-    elif lang == 'go':
+    elif lang == 'go' or lang == 'js':
         for pattern in ('*.wasm', 'internal'):
             for item in Path('.').glob(pattern):
                 if item.is_dir(): shutil.rmtree(item, ignore_errors=True)
@@ -125,6 +129,13 @@ def bind(ctx):
             '-o', 'internal/', wit_path
         ], check=True)
         click.echo("Go bindings generated")
+    elif lang == 'js':
+        subprocess.run([
+            'jco', 'guest-types',
+            '-o', 'internal',
+            wit_path
+        ], check=True)
+        click.echo("JS guest types generated")
     else:
         click.echo(f"Bind not implemented for {lang}")
 
@@ -162,6 +173,16 @@ def build(ctx):
             src
         ], check=True)
         click.echo("Go component built")
+    elif lang == 'js':
+        subprocess.run([
+            'jco', 'componentize',
+            src,
+            cfg['wit-flag'], wit_path,
+            '--world-name', world,
+            '--out', f"{world}.wasm",
+            '--disable', 'http'
+        ], check=True)
+        click.echo("JS component built")
     else:
         click.echo(f"Build not implemented for {lang}")
 
