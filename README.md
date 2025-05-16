@@ -1,6 +1,6 @@
 # tarawasm
 
-A simple CLI for WebAssembly component workflow in Tarantool.
+A simple CLI for WebAssembly component workflow.
 
 ## Build from source
 
@@ -10,12 +10,30 @@ A simple CLI for WebAssembly component workflow in Tarantool.
 sudo apt-get update && sudo apt-get install -y patchelf
 pip install nuitka componentize-py
 
+# Install cargo
+curl https://sh.rustup.rs -sSf | sh
+
 # WASM tooling
-cargo install wkg           # for `wkg wit build`
-cargo install wasm-tools    # for `wasm-tools`
-cargo install wit-bindgen   # for `wit-bindgen-go`
+cargo install wkg
+cargo install wasm-tools
+cargo install wit-bindgen
+
+# Install npm
+sudo apt install nodejs
+sudo apt install npm
+
 # Install jco: https://github.com/bytecodealliance/jco
+npm install @bytecodealliance/jco
+npm install @bytecodealliance/componentize-js
+
+# Install Go
+wget https://go.dev/dl/go1.24.3.linux-amd64.tar.gz
+rm -rf /usr/local/go && tar -C /usr/local -xzf go1.24.3.linux-amd64.tar.gz
+export PATH=$PATH:/usr/local/go/bin
+
 # Install TinyGo: https://tinygo.org/getting-started/install/
+wget https://github.com/tinygo-org/tinygo/releases/download/v0.37.0/tinygo_0.37.0_amd64.deb
+sudo dpkg -i tinygo_0.37.0_amd64.deb
 ```
 
 ### Build
@@ -26,7 +44,6 @@ cargo install wit-bindgen   # for `wit-bindgen-go`
 
 # Or manually
 nuitka --onefile --standalone tarawasm.py -o tarawasm
-chmod +x tarawasm
 ```
 
 
