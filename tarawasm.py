@@ -46,12 +46,12 @@ import (
     "go.bytecodealliance.org/cm"
 )
 
-func init() {
-    run.Exports.Run = func() (result cm.BoolResult) {
+func init() {{
+    run.Exports.Run = func() (result cm.BoolResult) {{
         fmt.Println("Hello from Go WASM!")
         return cm.BoolResult(true)
-    }
-}
+    }}
+}}
 
 func main() {{}}''',
 
@@ -68,12 +68,12 @@ use bindings::exports::wasi::cli::run::Guest;
 
 struct Component;
 
-impl Guest for Component {{
-    fn run() -> Result<(),()> {{
+impl Guest for Component {
+    fn run() -> Result<(),()> {
         println!("Hello from Rust WASM!");
         Ok(())
-    }}
-}}
+    }
+}
 
 bindings::export!(Component with_types_in bindings);'''
 }
@@ -137,8 +137,9 @@ def init(world, lang, wasm_file, wit_dir, src_file):
     if src and template:
         src_path = Path(src)
         with open(src_path, 'w') as f:
-            rendered = template.format(world=world)
-            print(rendered, file=f)
+            if lang == 'python' or lang == 'go':
+                template = template.format(world=world)
+            print(template, file=f)
             click.echo(f"Created starter source file: {src}")
 
     # Save config

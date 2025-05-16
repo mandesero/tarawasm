@@ -50,6 +50,7 @@ jobs:
           echo "/usr/local/go/bin" >> $GITHUB_PATH
           wget https://github.com/tinygo-org/tinygo/releases/download/v0.37.0/tinygo_0.37.0_amd64.deb
           sudo dpkg -i tinygo_0.37.0_amd64.deb
+          go install go.bytecodealliance.org/cmd/wit-bindgen-go@latest
         elif [ "${{ matrix.lang }}" = "js" ]; then
           npm install -g @bytecodealliance/jco @bytecodealliance/componentize-js
         fi
@@ -84,4 +85,3 @@ jobs:
           echo "Actual:   $output"
           exit 1
         fi
-        echo "${{ matrix.lang }} test passed!"
