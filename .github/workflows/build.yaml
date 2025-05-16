@@ -1,89 +1,87 @@
-name: Build
+name: Build and Test
 
 on:
   push:
   pull_request:
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        include:
+          - lang: python
+            expected_output: "Hello from Python WASM!"
+          - lang: go
+            expected_output: "Hello from Go WASM!"
+          - lang: js
+            expected_output: "Hello from JS WASM!"
+          - lang: rust
+            expected_output: "Hello from Rust WASM!"
+
     steps:
-    - name: Checkout repository
+    - name: Checkout repo
       uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.x'
-
-    - name: Set up Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        profile: minimal
-        override: true
-
-    - name: Cache Rust build
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          rust-${{ runner.os }}-
-
-    - name: Install system dependencies
+    - name: Install base tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y patchelf python3-pip nodejs npm wget curl
+        sudo apt-get install -y python3-pip patchelf nodejs npm wget curl
+        pip install nuitka
 
-    - name: Install Python packages
+    - name: Install Rust and WASM tools
       run: |
-        pip install --upgrade pip
-        pip install nuitka componentize-py
+        curl https://sh.rustup.rs -sSf | sh -s -- -y
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        source "$HOME/.cargo/env"
+        cargo install --locked wkg
+        cargo install --locked cargo-component
+        cargo install --locked wasm-tools
 
-    - name: Install WASM tooling (wkg, wasm-tools, wit-bindgen)
+    - name: Install language-specific tools
       run: |
-        cargo install wkg
-        cargo install wasm-tools
+        if [ "${{ matrix.lang }}" = "python" ]; then
+          pip install componentize-py
+        elif [ "${{ matrix.lang }}" = "go" ]; then
+          wget https://go.dev/dl/go1.24.3.linux-amd64.tar.gz
+          sudo rm -rf /usr/local/go
+          sudo tar -C /usr/local -xzf go1.24.3.linux-amd64.tar.gz
+          echo "/usr/local/go/bin" >> $GITHUB_PATH
+          wget https://github.com/tinygo-org/tinygo/releases/download/v0.37.0/tinygo_0.37.0_amd64.deb
+          sudo dpkg -i tinygo_0.37.0_amd64.deb
+        elif [ "${{ matrix.lang }}" = "js" ]; then
+          npm install -g @bytecodealliance/jco @bytecodealliance/componentize-js
+        fi
 
-    - name: Cache Node modules
-      uses: actions/cache@v3
-      with:
-        path: ~/.npm
-        key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-        restore-keys: |
-          npm-${{ runner.os }}-
-
-    - name: Install JCO and componentize-js
+    - name: Install Wasmtime
       run: |
-        npm install -g @bytecodealliance/jco
-        npm install -g @bytecodealliance/componentize-js
+        curl https://wasmtime.dev/install.sh -sSf | bash
+        echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
 
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.24.3'
-
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/go/pkg/mod
-          ~/.cache/go-build
-        key: go-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          go-${{ runner.os }}-
-
-    - name: Install TinyGo
-      run: |
-        wget https://github.com/tinygo-org/tinygo/releases/download/v0.37.0/tinygo_0.37.0_amd64.deb
-        sudo dpkg -i tinygo_0.37.0_amd64.deb
-
-    - name: Run build script
+    - name: Build tarawasm binary
       run: |
         chmod +x ./build.sh
         ./build.sh
+        echo "$PWD" >> $GITHUB_PATH
+
+    - name: Run ${{ matrix.lang }} WASM test
+      run: |
+        TMP=$(mktemp -d)
+        cp examples/${{ matrix.lang }}/docs:adder@0.1.0.wasm $TMP/
+        cd $TMP
+        tarawasm init --lang ${{ matrix.lang }} --wasm-file docs:adder@0.1.0.wasm adder
+        tarawasm bind
+        tarawasm build
+
+        echo "Running wasmtime..."
+        output=$(wasmtime adder.wasm)
+        echo "Output: $output"
+
+        expected="${{ matrix.expected_output }}"
+        if [[ "$output" != "$expected" ]]; then
+          echo "Expected: $expected"
+          echo "Actual:   $output"
+          exit 1
+        fi
+        echo "${{ matrix.lang }} test passed!"
