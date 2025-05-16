@@ -1,0 +1,89 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+
+    - name: Cache Rust build
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          rust-${{ runner.os }}-
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y patchelf python3-pip nodejs npm wget curl
+
+    - name: Install Python packages
+      run: |
+        pip install --upgrade pip
+        pip install nuitka componentize-py
+
+    - name: Install WASM tooling (wkg, wasm-tools, wit-bindgen)
+      run: |
+        cargo install wkg
+        cargo install wasm-tools
+
+    - name: Cache Node modules
+      uses: actions/cache@v3
+      with:
+        path: ~/.npm
+        key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+        restore-keys: |
+          npm-${{ runner.os }}-
+
+    - name: Install JCO and componentize-js
+      run: |
+        npm install -g @bytecodealliance/jco
+        npm install -g @bytecodealliance/componentize-js
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24.3'
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: go-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          go-${{ runner.os }}-
+
+    - name: Install TinyGo
+      run: |
+        wget https://github.com/tinygo-org/tinygo/releases/download/v0.37.0/tinygo_0.37.0_amd64.deb
+        sudo dpkg -i tinygo_0.37.0_amd64.deb
+
+    - name: Run build script
+      run: |
+        chmod +x ./build.sh
+        ./build.sh
