@@ -31,6 +31,40 @@ LANG_CFGS = {
   }
 }
 
+TEMPLATES = {
+    'python': '''from {world} import exports
+
+class Run(exports.Run):
+    def run(self) -> None:
+        print("Hello from Python WASM!")''',
+
+    'go': '''package main
+
+import (
+    "fmt"
+    "{world}-wasm-bindings/internal/wasi/cli/run"
+    "go.bytecodealliance.org/cm"
+)
+
+func init() {
+    run.Exports.Run = func() (result cm.BoolResult) {
+        fmt.Println("Hello from Go WASM!")
+        return cm.BoolResult(true)
+    }
+}
+
+func main() {{}}''',
+
+    'js': '''export const run = {
+    run: async function() {
+        console.info("Hello from JS WASM!")
+    }
+}   ''',
+
+    'rust': None  # Rust handled by `cargo component new`
+}
+
+
 class ConfigError(Exception):
     pass
 
@@ -84,6 +118,15 @@ def init(world, lang, wasm_file, wit_dir, src_file):
     click.echo(f"Extracting WIT from '{wasm_file}' to '{out_wit}'...")    
     with open(out_wit, 'w') as f:
         subprocess.run(['wasm-tools', 'component', 'wit', str(wasm_path)], check=True, stdout=f)
+
+    template = TEMPLATES.get(lang)
+    if src and template:
+        src_path = Path(src)
+        if not src_path.exists():
+            rendered = template.format(world=world)
+            src_path.write_text(rendered)
+            click.echo(f"Created starter source file: {src}")
+
     # Save config
     conf = {
         'world': world,
