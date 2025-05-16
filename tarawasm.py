@@ -25,7 +25,7 @@ LANG_CFGS = {
         'default-src': 'main.js'
     },
     'rust': {
-        'default-src': None,               # Rust uses Cargo workspace, not a single src file
+        'default-src': 'src/lib.rs',
         'cargo-component': 'cargo',
         'release-target': 'wasm32-wasip1'
   }
@@ -61,7 +61,21 @@ func main() {{}}''',
     }
 }   ''',
 
-    'rust': None  # Rust handled by `cargo component new`
+    'rust': '''#[allow(warnings)]
+mod bindings;
+
+use bindings::exports::wasi::cli::run::Guest;
+
+struct Component;
+
+impl Guest for Component {{
+    fn run() -> Result<(),()> {{
+        println!("Hello from Rust WASM!");
+        Ok(())
+    }}
+}}
+
+bindings::export!(Component with_types_in bindings);'''
 }
 
 
@@ -122,9 +136,9 @@ def init(world, lang, wasm_file, wit_dir, src_file):
     template = TEMPLATES.get(lang)
     if src and template:
         src_path = Path(src)
-        if not src_path.exists():
+        with open(src_path, 'w') as f:
             rendered = template.format(world=world)
-            src_path.write_text(rendered)
+            print(rendered, file=f)
             click.echo(f"Created starter source file: {src}")
 
     # Save config
