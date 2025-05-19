@@ -1,0 +1,71 @@
+name: Test Docker Image
+
+on:
+  workflow_run:
+    workflows: ["Build and Publish"]
+    types:
+      - completed
+
+jobs:
+  test:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        lang: [python, go, js, rust]
+        include:
+          - lang: python
+            expected_output: "Hello from Python WASM!"
+          - lang: go
+            expected_output: "Hello from Go WASM!"
+          - lang: js
+            expected_output: "Hello from JS WASM!"
+          - lang: rust
+            expected_output: "Hello from Rust WASM!"
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Pull tarawasm image
+      run: docker pull mandeser0/tarawasm:latest
+    
+    - name: Install Wasmtime
+      run: |
+        curl https://wasmtime.dev/install.sh -sSf | bash
+        echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
+
+    - name: Run ${{ matrix.lang }} WASM test
+      run: |
+        TMP=$(mktemp -d)
+        cp examples/${{ matrix.lang }}/docs:adder@0.1.0.wasm $TMP/
+
+        # Build inside container
+        docker run --rm -v $TMP:/work -w /work mandeser0/tarawasm \
+          init --lang ${{ matrix.lang }} --wasm-file docs:adder@0.1.0.wasm adder
+        docker run --rm -v $TMP:/work -w /work mandeser0/tarawasm bind
+        docker run --rm -v $TMP:/work -w /work mandeser0/tarawasm build
+
+        # Fix permissions so host can read and execute the files
+        sudo chown -R $(id -u):$(id -g) $TMP
+        chmod -R u+rwX $TMP
+
+        # Run wasmtime on host
+        output=$(wasmtime $TMP/adder.wasm)
+        echo "Output: $output"
+
+        output=$(wasmtime $TMP/adder.wasm)
+        echo "Output: $output"
+
+        if [ "$output" != "${{ matrix.expected_output }}" ]; then
+          echo "Expected: ${{ matrix.expected_output }}"
+          echo "Actual: $output"
+          exit 1
+        fi
