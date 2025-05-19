@@ -32,7 +32,7 @@ LANG_CFGS = {
 }
 
 TEMPLATES = {
-    'python': '''from {world} import exports
+    'python': '''from wit_world import exports
 
 class Run(exports.Run):
     def run(self) -> None:
@@ -137,7 +137,7 @@ def init(world, lang, wasm_file, wit_dir, src_file):
     if src and template:
         src_path = Path(src)
         with open(src_path, 'w') as f:
-            if lang == 'python' or lang == 'go':
+            if lang == 'go':
                 template = template.format(world=world)
             print(template, file=f)
             click.echo(f"Created starter source file: {src}")
