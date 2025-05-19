@@ -15,8 +15,6 @@ LANG_CFGS = {
     },
     'go': {
         'wit-flag': '--wit-dir',
-        # Ensure installed via: go install go.bytecodealliance.org/cmd/wit-bindgen-go@latest
-        'bindgen-cmd': 'wit-bindgen-go',
         'tinygo-target': 'wasip2',
         'default-src': 'main.go'
     },
@@ -209,7 +207,7 @@ def bind(ctx):
             subprocess.run(['go', 'get', 'go.bytecodealliance.org/cmd/wit-bindgen-go'], check=True)
             subprocess.run(['go', 'get', 'go.bytecodealliance.org/cm'], check=True)
         subprocess.run([
-            cfg['bindgen-cmd'], 'generate',
+            'go', 'run', 'go.bytecodealliance.org/cmd/wit-bindgen-go', 'generate',
             '-o', 'internal/', wit_path
         ], check=True)
         click.echo("Go bindings generated")
