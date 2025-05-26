@@ -2,6 +2,12 @@ FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Set working directory inside the container
+WORKDIR /app
+
+# Copy entire project into the container
+COPY . .
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     python3 python3-pip python3-dev build-essential \
@@ -29,7 +35,7 @@ RUN wget https://github.com/tinygo-org/tinygo/releases/download/v0.37.0/tinygo_0
     rm tinygo_0.37.0_amd64.deb
 
 # Install Python dependencies
-RUN pip3 install --no-cache-dir nuitka componentize-py click
+RUN pip3 install -r requirements.txt
 
 # Install WASM tools: wkg, wasm-tools, wit-bindgen
 RUN cargo install wkg wasm-tools cargo-component
@@ -44,15 +50,9 @@ RUN apt-get update && apt-get install -y nodejs
 # Install JavaScript tooling: jco and componentize-js globally via npm
 RUN npm install -g @bytecodealliance/jco @bytecodealliance/componentize-js
 
-# Set working directory inside the container
-WORKDIR /app
+# Run check and build
+RUN make check && make build
 
-# Copy tarawasm.py script into the container
-COPY tarawasm.py .
-
-# Build standalone binary with Nuitka
-RUN nuitka --onefile --standalone tarawasm.py -o tarawasm && chmod +x tarawasm
-
-# Set entrypoint to the tarawasm binary
-ENTRYPOINT ["/app/tarawasm"]
+# Set entrypoint to the built binary
+ENTRYPOINT ["/app/target/tarawasm"]
 CMD ["--help"]
