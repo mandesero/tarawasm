@@ -1,0 +1,27 @@
+name: Build
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install system dependencies
+        run: sudo make install
+
+      - name: Verify system toolchain
+        run: make system-check
+
+      - name: Verify SDK & Python deps
+        run: make sdk-check
+
+      - name: Build CLI binary
+        run: make build
