@@ -50,9 +50,14 @@ RUN apt-get update && apt-get install -y nodejs
 # Install JavaScript tooling: jco and componentize-js globally via npm
 RUN npm install -g @bytecodealliance/jco @bytecodealliance/componentize-js
 
-# Run check and build
-RUN make check && make build
+RUN nuitka \
+    --onefile \
+    --standalone \
+    --include-package=tarawasm.templates \
+    --output-dir=target \
+    --output-filename=tarawasm \
+    --include-data-dir=tarawasm/templates=tarawasm/templates \
+    tarawasm/cli.py
 
-# Set entrypoint to the built binary
-ENTRYPOINT ["/app/target/tarawasm"]
+ENTRYPOINT ["/app/docker-scripts/entrypoint.sh"]
 CMD ["--help"]
