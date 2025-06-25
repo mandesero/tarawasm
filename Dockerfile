@@ -38,7 +38,7 @@ RUN wget https://github.com/tinygo-org/tinygo/releases/download/v0.37.0/tinygo_0
 RUN pip3 install -r requirements.txt
 
 # Install WASM tools: wkg, wasm-tools, wit-bindgen
-RUN cargo install wkg wasm-tools cargo-component
+RUN cargo install wkg wasm-tools cargo-component wit-bindgen-cli
 
 # Remove old nodejs if installed
 RUN apt-get remove -y nodejs npm libnode-dev || true
@@ -50,6 +50,12 @@ RUN apt-get update && apt-get install -y nodejs
 # Install JavaScript tooling: jco and componentize-js globally via npm
 RUN npm install -g @bytecodealliance/jco @bytecodealliance/componentize-js
 
+RUN wget https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/wasi-sdk-25.0-x86_64-linux.deb
+RUN apt-get install ./wasi-sdk-25.0-x86_64-linux.deb
+RUN rm wasi-sdk-25.0-x86_64-linux.deb
+ENV WASI_SDK_PATH=/opt/wasi-sdk
+ENV PATH="${WASI_SDK_PATH}/bin:${PATH}"
+
 RUN nuitka \
     --onefile \
     --standalone \
@@ -57,6 +63,7 @@ RUN nuitka \
     --output-dir=target \
     --output-filename=tarawasm \
     --include-data-dir=tarawasm/templates=tarawasm/templates \
+    --include-data-dir=tarawasm/lang_deps=tarawasm/lang_deps \
     tarawasm/cli.py
 
 ENTRYPOINT ["/app/docker-scripts/entrypoint.sh"]

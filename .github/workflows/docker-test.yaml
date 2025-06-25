@@ -23,6 +23,8 @@ jobs:
             expected_output: "Hello from JS WASM!"
           - lang: rust
             expected_output: "Hello from Rust WASM!"
+          - lang: c
+            expected_output: "Hello from C WASM!"
 
     steps:
     - name: Checkout repo
@@ -58,8 +60,11 @@ jobs:
         chmod -R u+rwX $TMP
 
         # Run wasmtime on host
-        output=$(wasmtime $TMP/adder.wasm)
-        echo "Output: $output"
+        if [ "${{ matrix.lang }}" == "c" ]; then
+          wasm_file="$TMP/adder.component.wasm"
+        else
+          wasm_file="$TMP/adder.wasm"
+        fi
 
         output=$(wasmtime $TMP/adder.wasm)
         echo "Output: $output"
