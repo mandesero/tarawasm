@@ -9,7 +9,7 @@ import (
 func init() {
     run.Exports.Run = func() (result cm.BoolResult) {
         fmt.Println("Hello from Go WASM!")
-        return cm.BoolResult(true)
+        return
     }
 }
 
