@@ -7,7 +7,6 @@ if command -v apt-get &> /dev/null; then
     sudo apt-get install -y \
         build-essential \
         ca-certificates \
-        clang \
         cmake \
         curl \
         git \
@@ -54,6 +53,7 @@ pip3 install -r requirements.txt
 cargo install --locked --root /usr/local wkg --version 0.10.0
 cargo install --locked --root /usr/local wasm-tools
 cargo install --locked --root /usr/local cargo-component --version 0.21.1
+cargo install --locked --root /usr/local wit-bindgen-cli
 
 # Node.js
 if command -v apt-get &> /dev/null; then
@@ -65,3 +65,17 @@ fi
 npm install -g \
     @bytecodealliance/jco@1.9.1 \
     @bytecodealliance/componentize-js
+
+# wasi-sdk
+if ! clang --version | grep -q "Target: wasm32-unknown-wasi"; then
+    echo "Installing wasi-sdk"
+    wget -q https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/wasi-sdk-25.0-x86_64-linux.deb
+    sudo apt install -y "./wasi-sdk-25.0-x86_64-linux.deb"
+    rm "wasi-sdk-25.0-x86_64-linux.deb"
+    
+    # Add /opt/wasi-sdk/bin to PATH for this session
+    export WASI_SDK_PATH=/opt/wasi-sdk
+    export PATH=$WASI_SDK_PATH/bin:$PATH
+    echo "export WASI_SDK_PATH=\"/opt/wasi-sdk\"" >> ~/.bashrc
+    echo "export PATH=\"/opt/wasi-sdk/bin:\$PATH\"" >> ~/.bashrc
+fi

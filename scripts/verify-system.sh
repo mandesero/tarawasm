@@ -7,6 +7,7 @@ declare -A REQUIRED_VERSIONS=(
   [tinygo]=0.37.0
   [node]=20.0.0
   [python3]=3.10.0
+  [clang]=19.1.5
 )
 
 error_flag=0
@@ -39,6 +40,14 @@ check_tool() {
     return
   fi
 
+  if [[ "$cmd" == "clang" ]]; then
+    if ! echo "$raw" | grep -q "wasm32-unknown-wasi"; then
+      printf "%-10s %-10s %-6s %s\n" "$cmd" "$need" "ERROR" "clang is not wasi-sdk build" "$raw"
+      error_flag=1
+      return
+    fi
+  fi
+
   if version_ge "$found" "$need"; then
     printf "%-10s >=%-9s %-6s %s\n" "$cmd" "$need" "OK" "$found"
   else
@@ -57,5 +66,6 @@ check_tool rustc    --version
 check_tool tinygo   version
 check_tool node     --version
 check_tool python3  --version
+check_tool clang  --version
 
 exit $error_flag
