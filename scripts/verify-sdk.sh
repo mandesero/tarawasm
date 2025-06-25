@@ -6,6 +6,7 @@ declare -A CMD_REQUIRED=(
   [wasm-tools]=1.0.43
   [cargo-component]=0.21.1
   [jco]=1.9.1
+  [wit-bindgen]=0.39.0
 )
 
 declare -A PIP_REQUIRED=(

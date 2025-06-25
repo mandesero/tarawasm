@@ -17,6 +17,9 @@ jobs:
       - name: Install system dependencies
         run: sudo make install
 
+      - name: Add WASI SDK to PATH
+        run: echo "/opt/wasi-sdk/bin" >> $GITHUB_PATH
+
       - name: Verify system toolchain
         run: make system-check
 

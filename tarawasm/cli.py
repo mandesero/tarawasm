@@ -3,7 +3,7 @@ import shutil
 from pathlib import Path
 import json
 import click
-from importlib.resources import read_text
+from importlib.resources import read_text, files, as_file
 
 def load_template(lang: str) -> str:
     return read_text("tarawasm.templates", f"{lang}.tpl")
@@ -30,7 +30,10 @@ LANG_CFGS = {
         'default-src': 'src/lib.rs',
         'cargo-component': 'cargo',
         'release-target': 'wasm32-wasip1'
-  }
+    },
+    'c': {
+        'default-src': 'component.c',
+    },
 }
 
 class ConfigError(Exception):
@@ -40,6 +43,16 @@ def load_config():
     if not Path(CONFIG_FILE).exists():
         raise ConfigError(f"Config file '{CONFIG_FILE}' not found. Run 'init' first.")
     return json.loads(Path(CONFIG_FILE).read_text())
+
+def copy_runtime_wasm():
+    dst_wasm = Path('.') / 'wasi_snapshot_preview1.wasm'
+    try:
+        wasm_resource = files('tarawasm.lang_deps') / 'wasi_snapshot_preview1.wasm'
+        with as_file(wasm_resource) as src_wasm:
+            shutil.copyfile(src_wasm, dst_wasm)
+        click.echo(f"Copied runtime WASM to {dst_wasm}")
+    except FileNotFoundError:
+        raise click.ClickException("Runtime file 'wasi_snapshot_preview1.wasm' not found in package.")
 
 @click.group()
 def cli():
@@ -82,6 +95,9 @@ def init(world, lang, wasm_file, wit_dir, src_file):
         wit_output = Path(wit_dir)
         wit_output.mkdir(parents=True, exist_ok=True)
         out_wit = wit_output / f"{world}.wit"
+
+    if lang == 'c':
+        copy_runtime_wasm()
 
     click.echo(f"Extracting WIT from '{wasm_file}' to '{out_wit}'...")    
     with open(out_wit, 'w') as f:
@@ -153,7 +169,9 @@ def bind(ctx):
     lang = conf['lang']
     world = conf['world']
     wit_path = conf['wit_path']
+    wasm_file_path = conf['wasm_file']
     cfg = LANG_CFGS[lang]
+    base_args = []
 
     if lang == 'python':
         base_cmd = ['componentize-py']
@@ -166,7 +184,8 @@ def bind(ctx):
         base_args = ['-o', 'internal', wit_path]
     elif lang == 'rust':
         base_cmd = ['cargo', 'component', 'bindings']
-        base_args = []
+    elif lang == 'c':
+        base_cmd = ['wit-bindgen', 'c', wasm_file_path]
     else:
         raise click.ClickException(f"Unsupported lang: {lang}")
 
@@ -243,6 +262,9 @@ def build(ctx):
     elif lang == 'rust':
         base_cmd = ['cargo', 'component', 'build']
         base_args = ['--release']
+    elif lang == 'c':
+        base_cmd = ['clang', src, f'{world}.c', f'{world}_component_type.o']
+        base_args = ['-o', f'{world}.wasm', '-mexec-model=reactor']
     else:
         raise click.ClickException(f"Unsupported lang: {lang}")
 
@@ -291,6 +313,11 @@ def build(ctx):
             click.echo(f"Moved {src_path} to {dst}")
         else:
             raise click.ClickException(f"WASM file '{src_path}' not found")
+
+    if lang == 'c':
+        full_cmd = f'wasm-tools component new {world}.wasm --adapt wasi_snapshot_preview1.wasm -o {world}.component.wasm'.split()
+        click.echo(f"Running: {' '.join(full_cmd)}")
+        subprocess.run(full_cmd, check=True)
 
 
 @cli.command()
