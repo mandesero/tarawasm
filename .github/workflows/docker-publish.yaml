@@ -1,12 +1,13 @@
-name: Docker build & publish
+name: Docker build and test & Master publish
 
 on:
   push:
     branches:
       - master
+  pull_request:
 
 jobs:
-  build-and-push:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -25,5 +26,49 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
-          push: true
+          push: ${{ github.ref == 'refs/heads/master' }}
+          load: true
           tags: mandeser0/tarawasm:latest
+
+      - name: Install Wasmtime
+        run: |
+          curl https://wasmtime.dev/install.sh -sSf | bash
+          echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
+
+      - name: Run WASM tests for all languages
+        run: |
+          declare -A expected=(
+            [python]="Hello from Python WASM!"
+            [go]="Hello from Go WASM!"
+            [js]="Hello from JS WASM!"
+            [rust]="Hello from Rust WASM!"
+            [c]="Hello from C WASM!"
+          )
+          for lang in "${!expected[@]}"; do
+            echo "Testing $lang..."
+            TMP=$(mktemp -d)
+            cp examples/$lang/docs:adder@0.1.0.wasm $TMP/
+
+            docker run --rm -v $TMP:/work -w /work mandeser0/tarawasm \
+              init --lang "$lang" --wasm-file docs:adder@0.1.0.wasm adder
+            docker run --rm -v $TMP:/work -w /work mandeser0/tarawasm bind
+            docker run --rm -v $TMP:/work -w /work mandeser0/tarawasm build
+
+            sudo chown -R $(id -u):$(id -g) $TMP
+            chmod -R u+rwX $TMP
+
+            if [ "$lang" == "c" ]; then
+              wasm_file="$TMP/adder.component.wasm"
+            else
+              wasm_file="$TMP/adder.wasm"
+            fi
+
+            output=$(wasmtime "$wasm_file")
+            echo "Output: $output"
+
+            if [ "$output" != "${expected[$lang]}" ]; then
+              echo "Expected: ${expected[$lang]}"
+              echo "Actual: $output"
+              exit 1
+            fi
+          done
