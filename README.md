@@ -186,10 +186,11 @@ g
 
 ## Formatting and linting
 
-Install optional development dependencies:
+Install optional development dependencies and enable `pre-commit` hooks:
 
 ```bash
 python3 -m pip install -r requirements-dev.txt
+pre-commit install
 ```
 
 Run Ruff to check code style:

@@ -1,2 +1,4 @@
 ruff
 black
+isort
+pre-commit
