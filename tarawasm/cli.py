@@ -5,83 +5,103 @@ import json
 import click
 from importlib.resources import read_text, files, as_file
 
+
 def load_template(lang: str) -> str:
     return read_text("tarawasm.templates", f"{lang}.tpl")
 
+
 # Configuration file path
-CONFIG_FILE = 'tarawasm.json'
+CONFIG_FILE = "tarawasm.json"
 
 # Supported languages and defaults
 LANG_CFGS = {
-    'python': {
-        'wit-flag': '--wit-path',
-        'default-src': 'main.py'
+    "python": {"wit-flag": "--wit-path", "default-src": "main.py"},
+    "go": {
+        "wit-flag": "--wit-dir",
+        "tinygo-target": "wasip2",
+        "default-src": "main.go",
     },
-    'go': {
-        'wit-flag': '--wit-dir',
-        'tinygo-target': 'wasip2',
-        'default-src': 'main.go'
+    "js": {"wit-flag": "--wit", "default-src": "main.js"},
+    "rust": {
+        "default-src": "src/lib.rs",
+        "cargo-component": "cargo",
+        "release-target": "wasm32-wasip1",
     },
-    'js': {
-        'wit-flag': '--wit',
-        'default-src': 'main.js'
-    },
-    'rust': {
-        'default-src': 'src/lib.rs',
-        'cargo-component': 'cargo',
-        'release-target': 'wasm32-wasip1'
-    },
-    'c': {
-        'default-src': 'component.c',
+    "c": {
+        "default-src": "component.c",
     },
 }
 
+
 class ConfigError(Exception):
     pass
+
 
 def load_config():
     if not Path(CONFIG_FILE).exists():
         raise ConfigError(f"Config file '{CONFIG_FILE}' not found. Run 'init' first.")
     return json.loads(Path(CONFIG_FILE).read_text())
 
+
 def copy_runtime_wasm():
-    dst_wasm = Path('.') / 'wasi_snapshot_preview1.wasm'
+    dst_wasm = Path(".") / "wasi_snapshot_preview1.wasm"
     try:
-        wasm_resource = files('tarawasm.lang_deps') / 'wasi_snapshot_preview1.wasm'
+        wasm_resource = files("tarawasm.lang_deps") / "wasi_snapshot_preview1.wasm"
         with as_file(wasm_resource) as src_wasm:
             shutil.copyfile(src_wasm, dst_wasm)
         click.echo(f"Copied runtime WASM to {dst_wasm}")
     except FileNotFoundError:
-        raise click.ClickException("Runtime file 'wasi_snapshot_preview1.wasm' not found in package.")
+        raise click.ClickException(
+            "Runtime file 'wasi_snapshot_preview1.wasm' not found in package."
+        )
+
 
 @click.group()
 def cli():
     """tarawasm: CLI for building WebAssembly components"""
     pass
 
+
 @cli.command()
-@click.argument('world')
-@click.option('--lang', '-l', required=True, type=click.Choice(list(LANG_CFGS.keys())), help='Guest language to use')
-@click.option('--wasm-file', '-w', required=True, help='Path to the .wasm file for init step')
-@click.option('--wit-dir', default='./wit', help='Directory to write WIT definitions (default: ./wit)')
-@click.option('--src-file', '-s', default=None, help='Source file to compile (default per language)')
+@click.argument("world")
+@click.option(
+    "--lang",
+    "-l",
+    required=True,
+    type=click.Choice(list(LANG_CFGS.keys())),
+    help="Guest language to use",
+)
+@click.option(
+    "--wasm-file", "-w", required=True, help="Path to the .wasm file for init step"
+)
+@click.option(
+    "--wit-dir",
+    default="./wit",
+    help="Directory to write WIT definitions (default: ./wit)",
+)
+@click.option(
+    "--src-file",
+    "-s",
+    default=None,
+    help="Source file to compile (default per language)",
+)
 def init(world, lang, wasm_file, wit_dir, src_file):
     """Initialize project and save configuration"""
     # Validate language
     cfg = LANG_CFGS[lang]
     # Determine src file
-    default_src = cfg.get('default-src')
+    default_src = cfg.get("default-src")
     src = src_file or default_src
     # Extract WIT if needed
     wasm_path = Path(wasm_file)
     if not wasm_path.exists():
         raise click.ClickException(f"WASM file '{wasm_file}' not found")
 
-    if lang == 'rust':
-        subprocess.run(['cargo', 'component', 'new', '--lib', world], check=True)
+    if lang == "rust":
+        subprocess.run(["cargo", "component", "new", "--lib", world], check=True)
         src_dir = Path(world)
         for item in src_dir.iterdir():
-            target = Path('.') / item.name
+            target = Path(".") / item.name
             if target.exists():
                 if target.is_dir():
                     shutil.rmtree(target)
@@ -89,19 +109,21 @@ def init(world, lang, wasm_file, wit_dir, src_file):
                     target.unlink()
             shutil.move(str(item), str(target))
         src_dir.rmdir()
-        wit_output = Path('./wit')
-        out_wit = wit_output / f"world.wit"
+        wit_output = Path("./wit")
+        out_wit = wit_output / "world.wit"
     else:
         wit_output = Path(wit_dir)
         wit_output.mkdir(parents=True, exist_ok=True)
         out_wit = wit_output / f"{world}.wit"
 
-    if lang == 'c':
+    if lang == "c":
         copy_runtime_wasm()
 
-    click.echo(f"Extracting WIT from '{wasm_file}' to '{out_wit}'...")    
-    with open(out_wit, 'w') as f:
-        subprocess.run(['wasm-tools', 'component', 'wit', str(wasm_path)], check=True, stdout=f)
+    click.echo(f"Extracting WIT from '{wasm_file}' to '{out_wit}'...")
+    with open(out_wit, "w") as f:
+        subprocess.run(
+            ["wasm-tools", "component", "wit", str(wasm_path)], check=True, stdout=f
+        )
 
     tpl = load_template(lang)
     content = tpl.replace("${world}", world)
@@ -111,14 +133,15 @@ def init(world, lang, wasm_file, wit_dir, src_file):
 
     # Save config
     conf = {
-        'world': world,
-        'lang': lang,
-        'wit_path': str(wit_output),
-        'src_file': src,
-        'wasm_file': wasm_file,
+        "world": world,
+        "lang": lang,
+        "wit_path": str(wit_output),
+        "src_file": src,
+        "wasm_file": wasm_file,
     }
     Path(CONFIG_FILE).write_text(json.dumps(conf, indent=2))
     click.echo(f"Configuration saved to '{CONFIG_FILE}'")
+
 
 @cli.command()
 @click.pass_context
@@ -129,35 +152,38 @@ def clean(ctx):
     except ConfigError as e:
         raise click.ClickException(str(e))
 
-    lang = conf['lang']
-    world = conf['world']
-    wasm_file = conf['wasm_file']
+    lang = conf["lang"]
+    world = conf["world"]
+    wasm_file = conf["wasm_file"]
 
     click.echo(f"Cleaning {lang} artifacts for world '{world}'...")
-    if lang == 'python':
+    if lang == "python":
         shutil.rmtree("wit_world", ignore_errors=True)
-        click.echo(f"Removed directory 'wit_world'")
-    elif lang == 'go' or lang == 'js':
-        for item in Path('.').glob('internal'):
+        click.echo("Removed directory 'wit_world'")
+    elif lang == "go" or lang == "js":
+        for item in Path(".").glob("internal"):
             if item.is_dir():
                 shutil.rmtree(item, ignore_errors=True)
             else:
                 item.unlink()
         click.echo(f"Cleaned {lang} artifacts")
-    elif lang == 'rust':
+    elif lang == "rust":
         target_dir = Path("target")
         if target_dir.exists() and target_dir.is_dir():
             shutil.rmtree(target_dir)
     else:
         click.echo(f"Clean not implemented for {lang}")
         return
-    
-    for item in Path('.').glob('*.wasm'):
+
+    for item in Path(".").glob("*.wasm"):
         if item != wasm_file:
             item.unlink()
 
 
-@cli.command(context_settings=dict(ignore_unknown_options=True, allow_extra_args=True), add_help_option=False)
+@cli.command(
+    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
+    add_help_option=False,
+)
 @click.pass_context
 def bind(ctx):
     """Generate bindings from WIT."""
@@ -166,52 +192,64 @@ def bind(ctx):
     except ConfigError as e:
         raise click.ClickException(str(e))
 
-    lang = conf['lang']
-    world = conf['world']
-    wit_path = conf['wit_path']
-    wasm_file_path = conf['wasm_file']
+    lang = conf["lang"]
+    world = conf["world"]
+    wit_path = conf["wit_path"]
+    wasm_file_path = conf["wasm_file"]
     cfg = LANG_CFGS[lang]
     base_args = []
 
-    if lang == 'python':
-        base_cmd = ['componentize-py']
-        base_args = [f"{cfg['wit-flag']}={wit_path}", f"--world={world}", 'bindings', '.']
-    elif lang == 'go':
-        base_cmd = ['go', 'run', 'go.bytecodealliance.org/cmd/wit-bindgen-go', 'generate']
-        base_args = ['-o', 'internal/', wit_path]
-    elif lang == 'js':
-        base_cmd = ['jco', 'guest-types']
-        base_args = ['-o', 'internal', wit_path]
-    elif lang == 'rust':
-        base_cmd = ['cargo', 'component', 'bindings']
-    elif lang == 'c':
-        base_cmd = ['wit-bindgen', 'c', wasm_file_path]
+    if lang == "python":
+        base_cmd = ["componentize-py"]
+        base_args = [
+            f"{cfg['wit-flag']}={wit_path}",
+            f"--world={world}",
+            "bindings",
+            ".",
+        ]
+    elif lang == "go":
+        base_cmd = [
+            "go",
+            "run",
+            "go.bytecodealliance.org/cmd/wit-bindgen-go",
+            "generate",
+        ]
+        base_args = ["-o", "internal/", wit_path]
+    elif lang == "js":
+        base_cmd = ["jco", "guest-types"]
+        base_args = ["-o", "internal", wit_path]
+    elif lang == "rust":
+        base_cmd = ["cargo", "component", "bindings"]
+    elif lang == "c":
+        base_cmd = ["wit-bindgen", "c", wasm_file_path]
     else:
         raise click.ClickException(f"Unsupported lang: {lang}")
 
-    if '--help' in ctx.args or '-hc' in ctx.args:
-        subprocess.run(base_cmd + ['--help'], check=False)
+    if "--help" in ctx.args or "-hc" in ctx.args:
+        subprocess.run(base_cmd + ["--help"], check=False)
         return
-    
-    if lang == 'go':
-        if not Path('go.mod').exists():
+
+    if lang == "go":
+        if not Path("go.mod").exists():
             click.echo("Initializing Go module...")
-            subprocess.run(['go', 'mod', 'init', f"{world}-wasm-bindings"], check=True)
-            subprocess.run(['go', 'get', 'go.bytecodealliance.org/cmd/wit-bindgen-go'], check=True)
-            subprocess.run(['go', 'get', 'go.bytecodealliance.org/cm'], check=True)
+            subprocess.run(["go", "mod", "init", f"{world}-wasm-bindings"], check=True)
+            subprocess.run(
+                ["go", "get", "go.bytecodealliance.org/cmd/wit-bindgen-go"], check=True
+            )
+            subprocess.run(["go", "get", "go.bytecodealliance.org/cm"], check=True)
 
     user_args = {}
     for arg in ctx.args:
-        if '=' in arg:
-            key, val = arg.split('=', 1)
+        if "=" in arg:
+            key, val = arg.split("=", 1)
             user_args[key] = val
         else:
             user_args[arg] = None
 
     final_args = []
     for arg in base_args:
-        if '=' in arg:
-            key, val = arg.split('=', 1)
+        if "=" in arg:
+            key, val = arg.split("=", 1)
             if key in user_args:
                 new_val = user_args.pop(key)
                 final_args.append(f"{key}={new_val}")
@@ -234,7 +272,10 @@ def bind(ctx):
     subprocess.run(full_cmd, check=True)
 
 
-@cli.command(context_settings=dict(ignore_unknown_options=True, allow_extra_args=True), add_help_option=False)
+@cli.command(
+    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
+    add_help_option=False,
+)
 @click.pass_context
 def build(ctx):
     """Compile source to wasm component."""
@@ -243,47 +284,73 @@ def build(ctx):
     except ConfigError as e:
         raise click.ClickException(str(e))
 
-    lang = conf['lang']
-    world = conf['world']
-    src = conf['src_file']
-    wit_path = conf['wit_path']
-    wasm_file = conf['wasm_file']
+    lang = conf["lang"]
+    world = conf["world"]
+    src = conf["src_file"]
+    wit_path = conf["wit_path"]
+    wasm_file = conf["wasm_file"]
     cfg = LANG_CFGS[lang]
 
-    if lang == 'python':
-        base_cmd = ['componentize-py']
-        base_args = [f"{cfg['wit-flag']}={wit_path}", f"--world={world}", 'componentize', src.split('.')[0], '-o', f"{world}.wasm"]
-    elif lang == 'go':
-        base_cmd = ['tinygo', 'build']
-        base_args = [f"-target={cfg['tinygo-target']}", '-o', f"{world}.wasm", '--wit-package', wasm_file, '--wit-world', world, src]
-    elif lang == 'js':
-        base_cmd = ['jco', 'componentize']
-        base_args = [src, cfg['wit-flag'], wit_path, '--world-name', world, '--out', f"{world}.wasm", '--disable', 'http']
-    elif lang == 'rust':
-        base_cmd = ['cargo', 'component', 'build']
-        base_args = ['--release']
-    elif lang == 'c':
-        base_cmd = ['clang', src, f'{world}.c', f'{world}_component_type.o']
-        base_args = ['-o', f'{world}.wasm', '-mexec-model=reactor']
+    if lang == "python":
+        base_cmd = ["componentize-py"]
+        base_args = [
+            f"{cfg['wit-flag']}={wit_path}",
+            f"--world={world}",
+            "componentize",
+            src.split(".")[0],
+            "-o",
+            f"{world}.wasm",
+        ]
+    elif lang == "go":
+        base_cmd = ["tinygo", "build"]
+        base_args = [
+            f"-target={cfg['tinygo-target']}",
+            "-o",
+            f"{world}.wasm",
+            "--wit-package",
+            wasm_file,
+            "--wit-world",
+            world,
+            src,
+        ]
+    elif lang == "js":
+        base_cmd = ["jco", "componentize"]
+        base_args = [
+            src,
+            cfg["wit-flag"],
+            wit_path,
+            "--world-name",
+            world,
+            "--out",
+            f"{world}.wasm",
+            "--disable",
+            "http",
+        ]
+    elif lang == "rust":
+        base_cmd = ["cargo", "component", "build"]
+        base_args = ["--release"]
+    elif lang == "c":
+        base_cmd = ["clang", src, f"{world}.c", f"{world}_component_type.o"]
+        base_args = ["-o", f"{world}.wasm", "-mexec-model=reactor"]
     else:
         raise click.ClickException(f"Unsupported lang: {lang}")
 
-    if '--help' in ctx.args or '-h' in ctx.args:
-        subprocess.run(base_cmd + ['--help'], check=False)
+    if "--help" in ctx.args or "-h" in ctx.args:
+        subprocess.run(base_cmd + ["--help"], check=False)
         return
 
     user_args = {}
     for arg in ctx.args:
-        if '=' in arg:
-            key, val = arg.split('=', 1)
+        if "=" in arg:
+            key, val = arg.split("=", 1)
             user_args[key] = val
         else:
             user_args[arg] = None
 
     final_args = []
     for arg in base_args:
-        if '=' in arg:
-            key, val = arg.split('=', 1)
+        if "=" in arg:
+            key, val = arg.split("=", 1)
             if key in user_args:
                 new_val = user_args.pop(key)
                 final_args.append(f"{key}={new_val}")
@@ -305,7 +372,7 @@ def build(ctx):
     click.echo(f"Running: {' '.join(full_cmd)}")
     subprocess.run(full_cmd, check=True)
 
-    if lang == 'rust':
+    if lang == "rust":
         src_path = Path("target/wasm32-wasip1/release") / f"{world}.wasm"
         dst = Path(".") / f"{world}.wasm"
         if src_path.exists():
@@ -314,8 +381,8 @@ def build(ctx):
         else:
             raise click.ClickException(f"WASM file '{src_path}' not found")
 
-    if lang == 'c':
-        full_cmd = f'wasm-tools component new {world}.wasm --adapt wasi_snapshot_preview1.wasm -o {world}.component.wasm'.split()
+    if lang == "c":
+        full_cmd = f"wasm-tools component new {world}.wasm --adapt wasi_snapshot_preview1.wasm -o {world}.component.wasm".split()
         click.echo(f"Running: {' '.join(full_cmd)}")
         subprocess.run(full_cmd, check=True)
 
@@ -331,5 +398,5 @@ def all(ctx):
     click.echo(f"{conf['world']}.wasm is ready")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     cli()

@@ -183,3 +183,23 @@ g
 * `tarawasm build` — compile source to WASM component
 * `tarawasm clean` — remove build artifacts
 * `tarawasm all`   — run clean, bind, build in sequence
+
+## Formatting and linting
+
+Install optional development dependencies:
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+```
+
+Run Ruff to check code style:
+
+```bash
+ruff .
+```
+
+Run Black to format the code:
+
+```bash
+black .
+```
