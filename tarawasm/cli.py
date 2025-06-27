@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import json
 import shutil
 import subprocess
 from importlib.resources import as_file, files, read_text
 from pathlib import Path
+from typing import Dict
 
 import click
 
@@ -38,13 +41,13 @@ class ConfigError(Exception):
     pass
 
 
-def load_config():
+def load_config() -> Dict[str, str]:
     if not Path(CONFIG_FILE).exists():
         raise ConfigError(f"Config file '{CONFIG_FILE}' not found. Run 'init' first.")
     return json.loads(Path(CONFIG_FILE).read_text())
 
 
-def copy_runtime_wasm():
+def copy_runtime_wasm() -> None:
     dst_wasm = Path(".") / "wasi_snapshot_preview1.wasm"
     try:
         wasm_resource = files("tarawasm.lang_deps") / "wasi_snapshot_preview1.wasm"
@@ -58,7 +61,7 @@ def copy_runtime_wasm():
 
 
 @click.group()
-def cli():
+def cli() -> None:
     """tarawasm: CLI for building WebAssembly components"""
     pass
 
@@ -86,13 +89,21 @@ def cli():
     default=None,
     help="Source file to compile (default per language)",
 )
-def init(world, lang, wasm_file, wit_dir, src_file):
+def init(
+    world: str,
+    lang: str,
+    wasm_file: str,
+    wit_dir: str,
+    src_file: str | None,
+) -> None:
     """Initialize project and save configuration"""
     # Validate language
     cfg = LANG_CFGS[lang]
     # Determine src file
     default_src = cfg.get("default-src")
     src = src_file or default_src
+    if src is None:
+        raise click.ClickException("No source file specified and no default available")
     # Extract WIT if needed
     wasm_path = Path(wasm_file)
     if not wasm_path.exists():
@@ -129,7 +140,7 @@ def init(world, lang, wasm_file, wit_dir, src_file):
     tpl = load_template(lang)
     content = tpl.replace("${world}", world)
 
-    out = Path(src_file or default_src)
+    out = Path(src)
     out.write_text(content)
 
     # Save config
@@ -146,7 +157,7 @@ def init(world, lang, wasm_file, wit_dir, src_file):
 
 @cli.command()
 @click.pass_context
-def clean(ctx):
+def clean(ctx: click.Context) -> None:
     """Remove build artifacts"""
     try:
         conf = load_config()
@@ -186,7 +197,7 @@ def clean(ctx):
     add_help_option=False,
 )
 @click.pass_context
-def bind(ctx):
+def bind(ctx: click.Context) -> None:
     """Generate bindings from WIT."""
     try:
         conf = load_config()
@@ -239,7 +250,7 @@ def bind(ctx):
             )
             subprocess.run(["go", "get", "go.bytecodealliance.org/cm"], check=True)
 
-    user_args = {}
+    user_args: Dict[str, str | None] = {}
     for arg in ctx.args:
         if "=" in arg:
             key, val = arg.split("=", 1)
@@ -252,7 +263,7 @@ def bind(ctx):
         if "=" in arg:
             key, val = arg.split("=", 1)
             if key in user_args:
-                new_val = user_args.pop(key)
+                new_val: str | None = user_args.pop(key)
                 final_args.append(f"{key}={new_val}")
             else:
                 final_args.append(arg)
@@ -262,11 +273,11 @@ def bind(ctx):
         else:
             final_args.append(arg)
 
-    for key, val in user_args.items():
-        if val is None:
+    for key, val_ in user_args.items():
+        if val_ is None:
             final_args.append(key)
         else:
-            final_args.append(f"{key}={val}")
+            final_args.append(f"{key}={val_}")
 
     full_cmd = base_cmd + final_args
     click.echo(f"Running: {' '.join(full_cmd)}")
@@ -278,7 +289,7 @@ def bind(ctx):
     add_help_option=False,
 )
 @click.pass_context
-def build(ctx):
+def build(ctx: click.Context) -> None:
     """Compile source to wasm component."""
     try:
         conf = load_config()
@@ -340,7 +351,7 @@ def build(ctx):
         subprocess.run(base_cmd + ["--help"], check=False)
         return
 
-    user_args = {}
+    user_args: Dict[str, str | None] = {}
     for arg in ctx.args:
         if "=" in arg:
             key, val = arg.split("=", 1)
@@ -353,7 +364,7 @@ def build(ctx):
         if "=" in arg:
             key, val = arg.split("=", 1)
             if key in user_args:
-                new_val = user_args.pop(key)
+                new_val: str | None = user_args.pop(key)
                 final_args.append(f"{key}={new_val}")
             else:
                 final_args.append(arg)
@@ -363,11 +374,11 @@ def build(ctx):
         else:
             final_args.append(arg)
 
-    for key, val in user_args.items():
-        if val is None:
+    for key, val_ in user_args.items():
+        if val_ is None:
             final_args.append(key)
         else:
-            final_args.append(f"{key}={val}")
+            final_args.append(f"{key}={val_}")
 
     full_cmd = base_cmd + final_args
     click.echo(f"Running: {' '.join(full_cmd)}")
@@ -390,7 +401,7 @@ def build(ctx):
 
 @cli.command()
 @click.pass_context
-def all(ctx):
+def all(ctx: click.Context) -> None:
     """Run clean, bind, build, pack"""
     ctx.invoke(clean)
     ctx.invoke(bind)
