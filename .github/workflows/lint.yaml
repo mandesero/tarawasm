@@ -18,5 +18,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
+      - name: Install hadolint
+        run: |
+          sudo wget -O /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64
+          sudo chmod +x /usr/local/bin/hadolint
       - name: Run pre-commit
         run: pre-commit run --all-files --color always
+      - name: Run hadolint
+        run: hadolint Dockerfile

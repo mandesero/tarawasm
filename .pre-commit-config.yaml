@@ -21,3 +21,7 @@ repos:
       - id: shellcheck
         files: ^(scripts|docker-scripts)/.*\.sh$
         args: ["--severity=error"]
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
