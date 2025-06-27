@@ -15,16 +15,26 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Install system dependencies
-        run: sudo make install
-
-      - name: Add WASI SDK to PATH
-        run: echo "/opt/wasi-sdk/bin" >> $GITHUB_PATH
+        run: |
+          sudo make install
+          echo "/opt/wasi-sdk/bin" >> $GITHUB_PATH
 
       - name: Verify system toolchain
         run: make system-check
 
       - name: Verify SDK & Python deps
         run: make sdk-check
+
+      - name: Install development dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Install Wasmtime
+        run: |
+          curl https://wasmtime.dev/install.sh -sSf | bash
+          echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
+
+      - name: Run tests
+        run: pytest -vv
 
       - name: Build CLI binary
         run: make build
