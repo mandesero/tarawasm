@@ -171,6 +171,17 @@ Add this alias to your shell config (`~/.bashrc` or `~/.zshrc`):
 alias tarawasm='docker run --rm -v "$PWD":/work -w /work mandeser0/tarawasm'
 ```
 
+### Installing additional Python packages inside the Docker container
+
+When working on **Python-based components**, the base Docker image may not include all Python libraries you need.
+If you encounter missing dependencies, you can install them directly inside the container using:
+
+```bash
+tarawasm pip install <your-package>
+```
+
+This will run `pip install` **inside the Docker container**, making the package available for subsequent `tarawasm build` commands.
+
 ---
 
 ## Usage
@@ -214,13 +225,17 @@ tarawasm build
 
 ## Available Commands
 
-| Command          | Description                        |
-| ---------------- | ---------------------------------- |
-| `tarawasm init`  | Initialize project and save config |
-| `tarawasm bind`  | Generate bindings from WIT         |
-| `tarawasm build` | Compile source to WASM component   |
-| `tarawasm clean` | Remove build artifacts             |
-| `tarawasm all`   | Run clean, bind, and build         |
+| Command          | Description                                 |
+| ---------------- | --------------------------------------------|
+| `tarawasm init`  | Initialize project and save config          |
+| `tarawasm bind`  | Generate bindings from WIT                  |
+| `tarawasm build` | Compile source to WASM component            |
+| `tarawasm clean` | Remove build artifacts                      |
+| `tarawasm all`   | Run clean, bind, and build                  |
+| `tarawasm strip` | Remove custom sections from the WASM binary |
+
+> The `strip` command helps reduce the size of the generated WASM component by removing unnecessary custom sections.
+> This is especially useful for **Python-based components**, where it can reduce the final binary size by up to **2x**.
 
 ---
 

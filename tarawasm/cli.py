@@ -399,6 +399,26 @@ def build(ctx: click.Context) -> None:
         subprocess.run(full_cmd, check=True)
 
 
+@cli.command(
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+    add_help_option=False,
+)
+@click.argument("wasm")
+@click.pass_context
+def strip(ctx: click.Context, wasm: str) -> None:
+    """Remove custom sections from a WebAssembly file."""
+    output_flag_present = any(arg in ctx.args for arg in ("--output", "-o"))
+    default_output = (
+        ["--output", f"{wasm.rsplit('.', 1)[0]}.strip.wasm"]
+        if not output_flag_present
+        else []
+    )
+
+    cmd = ["wasm-tools", "strip", wasm] + default_output + ctx.args
+    click.echo(f"Running: {' '.join(cmd)}")
+    subprocess.run(cmd, check=True)
+
+
 @cli.command()
 @click.pass_context
 def all(ctx: click.Context) -> None:
