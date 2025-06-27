@@ -2,65 +2,98 @@
 
 A simple CLI for WebAssembly component workflow.
 
+## Supported guest languages
+
+- **Python**
+- **Go**
+- **Rust**
+- **JavaScript**
+- **C/C++**
+
+---
+
+## Table of Contents
+
+- [Quickstart](#quickstart)
+- [Manual installation](#manual-installation)
+  - [1. System packages (Debian/Ubuntu)](#1-system-packages-debianubuntu)
+  - [2. Go 1.24.3](#2-go-1243)
+  - [3. Rust](#3-rust)
+  - [4. TinyGo](#4-tinygo)
+  - [5. Python packages](#5-python-packages)
+  - [6. WASM tools (Cargo)](#6-wasm-tools-cargo)
+  - [7. Node.js 22.x](#7-nodejs-22x)
+  - [8. JavaScript tools (npm)](#8-javascript-tools-npm)
+  - [9. WASI SDK](#9-wasi-sdk)
+- [Using Docker](#using-docker)
+- [Usage](#usage)
+  - [Providing WIT definitions](#providing-wit-definitions)
+  - [Initializing a project](#initializing-a-project)
+  - [Generating bindings](#generating-bindings)
+  - [Building the WASM component](#building-the-wasm-component)
+- [Available Commands](#available-commands)
+- [Formatting and linting](#formatting-and-linting)
+- [Running tests](#running-tests)
+
+---
+
 ## Quickstart
 
 1. **Install everything automatically**
 
-   ```bash
-   make install
-   ```
+```bash
+make install
+```
 
-   This will:
+This will:
 
-   * Install system packages (via `apt-get`)
-   * Install Go 1.24.3
-   * Install Rust (via `rustup`)
-   * Install TinyGo 0.37.0
-   * Install Python packages from `requirements.txt`
-   * Install WASM tools (`wkg`, `wasm-tools`, `cargo-component`)
-   * Install Node.js 22.x and JS tools (`jco`, `componentize-js`)
+* Install system packages (via `apt-get`)
+* Install Go 1.24.3
+* Install Rust (via `rustup`)
+* Install TinyGo 0.37.0
+* Install Python packages from `requirements.txt`
+* Install WASM tools (`wkg`, `wasm-tools`, `cargo-component`)
+* Install Node.js 22.x and JS tools (`jco`, `componentize-js`)
 
 2. **Verify your setup**
 
-   ```bash
-   make check
-   ```
+```bash
+make check
+```
 
-   Runs both:
+Runs both:
 
-   * `make system-check` — checks Go, Rust, TinyGo, Node.js, Python
-   * `make sdk-check` — checks installed CLI tools (`jco`, `wkg`, `wasm-tools`, `cargo-component`) and Python packages
+* `make system-check` — checks Go, Rust, TinyGo, Node.js, Python, clang (wasi-sdk)
+* `make sdk-check` — checks installed CLI tools (`jco`, `wkg`, `wasm-tools`, `cargo-component`) and Python packages
 
 3. **Build your project**
 
-   ```bash
-   make build
-   ```
+```bash
+make build
+```
 
 ---
 
 ## Manual installation
 
-If you prefer to install dependencies by hand, follow these steps.
+If you prefer to install dependencies manually, follow these steps.
 
 ### 1. System packages (Debian/Ubuntu)
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y \
-  build-essential ca-certificates clang cmake curl git gnupg \
+  build-essential ca-certificates cmake curl git gnupg \
   lld llvm patchelf python3 python3-dev python3-pip wget
 ```
 
 ### 2. Go 1.24.3
 
 ```bash
-GO_VERSION=1.24.3
-GO_ARCHIVE="go${GO_VERSION}.linux-amd64.tar.gz"
-wget https://go.dev/dl/${GO_ARCHIVE}
+wget https://go.dev/dl/go1.24.3.linux-amd64.tar.gz
 sudo rm -rf /usr/local/go
-sudo tar -C /usr/local -xzf ${GO_ARCHIVE}
-rm ${GO_ARCHIVE}
+sudo tar -C /usr/local -xzf go1.24.3.linux-amd64.tar.gz
+rm go1.24.3.linux-amd64.tar.gz
 export PATH="/usr/local/go/bin:$PATH"
 ```
 
@@ -74,24 +107,12 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ### 4. TinyGo
 
 ```bash
-TINYGO_VERSION=0.37.0
-TINYGO_DEB="tinygo_${TINYGO_VERSION}_amd64.deb"
-wget https://github.com/tinygo-org/tinygo/releases/download/v${TINYGO_VERSION}/${TINYGO_DEB}
-sudo dpkg -i ${TINYGO_DEB}
-rm ${TINYGO_DEB}
+wget https://github.com/tinygo-org/tinygo/releases/download/v0.37.0/tinygo_0.37.0_amd64.deb
+sudo dpkg -i tinygo_0.37.0_amd64.deb
+rm tinygo_0.37.0_amd64.deb
 ```
 
 ### 5. Python packages
-
-Create a `requirements.txt` with:
-
-```text
-nuitka>=2.7.2
-componentize-py>=0.17.0
-click>=8.1.7
-```
-
-Then install:
 
 ```bash
 python3 -m pip install --upgrade pip
@@ -120,11 +141,23 @@ npm install -g @bytecodealliance/jco@1.9.1 \
                @bytecodealliance/componentize-js@0.7.0
 ```
 
+### 9. WASI SDK
+
+```bash
+wget -q https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/wasi-sdk-25.0-x86_64-linux.deb
+sudo apt install -y ./wasi-sdk-25.0-x86_64-linux.deb
+rm wasi-sdk-25.0-x86_64-linux.deb
+
+# Add /opt/wasi-sdk/bin to PATH
+export WASI_SDK_PATH=/opt/wasi-sdk
+export PATH=$WASI_SDK_PATH/bin:$PATH
+```
+
 ---
 
 ## Using Docker
 
-You can avoid installing all dependencies locally by using the official Docker image:
+You can avoid installing all dependencies locally by using the [official Docker image](https://hub.docker.com/r/mandeser0/tarawasm):
 
 ```bash
 docker pull mandeser0/tarawasm:latest
@@ -132,7 +165,7 @@ docker pull mandeser0/tarawasm:latest
 
 ### Convenient alias
 
-Add this alias to your shell configuration (`~/.bashrc` or `~/.zshrc`) to simplify usage:
+Add this alias to your shell config (`~/.bashrc` or `~/.zshrc`):
 
 ```bash
 alias tarawasm='docker run --rm -v "$PWD":/work -w /work mandeser0/tarawasm'
@@ -142,65 +175,98 @@ alias tarawasm='docker run --rm -v "$PWD":/work -w /work mandeser0/tarawasm'
 
 ## Usage
 
-0. **Provide WIT definitions**
-   For example, generate from your WIT descriptions:
+### Providing WIT definitions
 
-   ```bash
-   wkg wit build --wit-dir=<..wit-path..>
-   ```
+Before starting, you need WIT definitions. Example:
 
-   Move the resulting `.wasm` file to your project directory.
+```bash
+wkg wit build --wit-dir=<path-to-your-wit-files>
+```
 
-1. **Initialize the project**
+Move the resulting `.wasm` file into your project directory.
 
-   ```bash
-   tarawasm init --lang <..lang..> --wasm-file <..your-wasm-file..> <..world..>
-   ```
+---
 
-   Optionally specify a custom source file:
+### Initializing a project
 
-   ```bash
-   tarawasm init --lang <..lang..> --wasm-file <..your-wasm-file..> \
-     --src-file <..your-file..> <..world..>
-   ```
+```bash
+tarawasm init --lang <language> --wasm-file <your-wasm-file> <world-name>
+```
 
-2. **Generate bindings**
+You can optionally specify a custom source file:
 
-   ```bash
-   tarawasm bind
-   ```
-g
-3. **Compile to a WASM component**
+```bash
+tarawasm init --lang <language> --wasm-file <your-wasm-file> \
+  --src-file <your-source-file> <world-name>
+```
 
-   ```bash
-   tarawasm build
-   ```
+### Generating bindings
 
-## Commands
+```bash
+tarawasm bind
+```
 
-* `tarawasm init`  — initialize project and save config
-* `tarawasm bind`  — generate bindings from WIT
-* `tarawasm build` — compile source to WASM component
-* `tarawasm clean` — remove build artifacts
-* `tarawasm all`   — run clean, bind, build in sequence
+### Building the WASM component
+
+```bash
+tarawasm build
+```
+
+## Available Commands
+
+| Command          | Description                        |
+| ---------------- | ---------------------------------- |
+| `tarawasm init`  | Initialize project and save config |
+| `tarawasm bind`  | Generate bindings from WIT         |
+| `tarawasm build` | Compile source to WASM component   |
+| `tarawasm clean` | Remove build artifacts             |
+| `tarawasm all`   | Run clean, bind, and build         |
+
+---
 
 ## Formatting and linting
 
-Install optional development dependencies and enable `pre-commit` hooks:
+To install development dependencies and set up pre-commit hooks:
 
 ```bash
 python3 -m pip install -r requirements-dev.txt
 pre-commit install
 ```
 
-Run Ruff to check code style:
+Run Ruff for code style checks:
 
 ```bash
 ruff .
 ```
 
-Run Black to format the code:
+Run Black for formatting:
 
 ```bash
 black .
+```
+
+Or run all pre-commit hooks:
+
+```bash
+pre-commit run --all-files
+```
+
+---
+
+## Running tests
+
+The test suite mirrors the Docker workflow and requires a WebAssembly runtime.
+
+Set the `WASM_RUNTIME` environment variable to your runtime binary (defaults to `wasmtime`):
+
+```bash
+export WASM_RUNTIME=wasmtime
+```
+
+Tests for the C example will only run if `clang --version` reports the `wasm32-unknown-wasi` target (see [WASI SDK](#9-wasi-sdk)).
+
+Run tests:
+
+```bash
+pytest
 ```
