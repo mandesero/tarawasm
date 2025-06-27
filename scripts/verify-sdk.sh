@@ -35,8 +35,10 @@ check_cmd() {
     return
   fi
 
-  local raw=$($cmd --version 2>&1)
-  local found=$(echo "$raw" | grep -Eo '[0-9]+(\.[0-9]+){1,2}' | head -n1 || true)
+  local raw
+  raw=$("$cmd" --version 2>&1)
+  local found
+  found=$(echo "$raw" | grep -Eo '[0-9]+(\.[0-9]+){1,2}' | head -n1 || true)
 
   if [[ -z "$found" ]]; then
     printf "%-18s >=%-8s %-6s %s\n" "$cmd" "$need" "ERROR" "cannot parse version"
@@ -63,7 +65,8 @@ check_pip() {
     return
   fi
 
-  local found=$(pip3 show "$pkg" | awk '/^Version:/ {print $2}')
+  local found
+  found=$(pip3 show "$pkg" | awk '/^Version:/ {print $2}')
 
   if [[ -z "$found" ]]; then
     printf "%-18s >=%-8s %-6s %s\n" "$pkg" "$need" "ERROR" "cannot parse version"

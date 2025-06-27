@@ -1,4 +1,6 @@
-.PHONY: install system-check sdk-check check build
+.PHONY: install system-check sdk-check check build shellcheck
+
+SHELLCHECK_FILES := $(shell git ls-files '*.sh')
 
 install:
 	@./scripts/install_deps.sh
@@ -16,3 +18,6 @@ check: system-check sdk-check
 
 build:
 	@./scripts/build.sh
+
+shellcheck:
+	@shellcheck $(SHELLCHECK_FILES)

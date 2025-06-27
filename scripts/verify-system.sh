@@ -31,8 +31,10 @@ check_tool() {
     return
   fi
 
-  local raw=$($cmd $ver_arg 2>&1)
-  local found=$(echo "$raw" | grep -Eo '[0-9]+(\.[0-9]+){1,2}' | head -n1 || true)
+  local raw
+  raw=$("$cmd" "$ver_arg" 2>&1)
+  local found
+  found=$(echo "$raw" | grep -Eo '[0-9]+(\.[0-9]+){1,2}' | head -n1 || true)
 
   if [[ -z "$found" ]]; then
     printf "%-10s >=%-9s %-6s %s\n" "$cmd" "$need" "ERROR" "cannot parse '$raw'"
@@ -42,7 +44,7 @@ check_tool() {
 
   if [[ "$cmd" == "clang" ]]; then
     if ! echo "$raw" | grep -q "wasm32-unknown-wasi"; then
-      printf "%-10s %-10s %-6s %s\n" "$cmd" "$need" "ERROR" "clang is not wasi-sdk build" "$raw"
+      printf "%-10s %-10s %-6s %s %s\n" "$cmd" "$need" "ERROR" "clang is not wasi-sdk build" "$raw"
       error_flag=1
       return
     fi
