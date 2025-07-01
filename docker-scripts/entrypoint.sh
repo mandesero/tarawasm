@@ -1,8 +1,11 @@
 #!/bin/bash
+set -euo pipefail
+
+export PYTHONPATH="/app:${PYTHONPATH:-}"
 
 if [ "$1" == "pip" ]; then
     shift
     exec pip "$@"
 else
-    exec /app/target/tarawasm "$@"
+    exec python3 -m tarawasm.cli "$@"
 fi

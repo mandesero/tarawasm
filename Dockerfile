@@ -3,7 +3,6 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
-COPY . .
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -32,9 +31,6 @@ RUN curl -L https://github.com/tinygo-org/tinygo/releases/download/v0.37.0/tinyg
     dpkg -i tinygo.deb && \
     rm tinygo.deb
 
-# Python deps
-RUN pip3 install --no-cache-dir -r requirements.txt
-
 # WASM tools
 RUN cargo install wkg wasm-tools cargo-component wit-bindgen-cli
 
@@ -58,16 +54,12 @@ RUN curl -L https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-2
 ENV WASI_SDK_PATH=/opt/wasi-sdk
 ENV PATH="${WASI_SDK_PATH}/bin:${PATH}"
 
-# Nuitka build
-RUN nuitka \
-    --onefile \
-    --standalone \
-    --include-package=tarawasm.templates \
-    --output-dir=target \
-    --output-filename=tarawasm \
-    --include-data-dir=tarawasm/templates=tarawasm/templates \
-    --include-data-dir=tarawasm/lang_deps=tarawasm/lang_deps \
-    tarawasm/cli.py
+COPY . .
+
+# Python deps
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+RUN chmod +x /app/docker-scripts/entrypoint.sh
 
 ENTRYPOINT ["/app/docker-scripts/entrypoint.sh"]
 CMD ["--help"]

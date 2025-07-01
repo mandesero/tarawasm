@@ -33,8 +33,12 @@ jobs:
           curl https://wasmtime.dev/install.sh -sSf | bash
           echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
 
-      - name: Run tests
-        run: pytest -vv
-
       - name: Build CLI binary
-        run: make build
+        run: |
+          make build
+          echo "${{ github.workspace }}/target" >> $GITHUB_PATH
+
+      - name: Run non-docker pytest tests (python and standalone modes)
+        env:
+          WASM_RUNTIME: wasmtime
+        run: pytest -k "not cli:docker" -vv

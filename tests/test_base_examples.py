@@ -1,10 +1,16 @@
-import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
+from utils import (
+    CLI_MODES,
+    RUNTIME,
+    clang_supports_wasm,
+    cli_mode_available,
+    run_cli,
+    runtime_available,
+)
 
 LANG_EXPECTED = {
     "python": "Hello from Python WASM!",
@@ -14,47 +20,27 @@ LANG_EXPECTED = {
     "c": "Hello from C WASM!",
 }
 
-RUNTIME = os.environ.get("WASM_RUNTIME", "wasmtime")
-
-
-def runtime_available() -> bool:
-    """Return True if the chosen runtime binary is present."""
-    return shutil.which(RUNTIME) is not None
-
-
-def clang_supports_wasm() -> bool:
-    """Check if system clang can target WebAssembly."""
-    try:
-        out = subprocess.check_output(["clang", "--version"], text=True)
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return False
-    return "wasm32-unknown-wasi" in out
-
 
 pytestmark = pytest.mark.skipif(
     not runtime_available(), reason=f"'{RUNTIME}' runtime is not available"
 )
 
+@pytest.mark.parametrize("mode", CLI_MODES, ids=lambda m: f"cli:{m}")
+@pytest.mark.parametrize("lang,expected", LANG_EXPECTED.items(), ids=lambda x: f"lang:{x}")
+def test_examples(lang, expected, tmp_path, mode):
+    if not cli_mode_available(mode):
+        pytest.skip(f"CLI mode '{mode}' not available in this environment")
 
-def run_cli(tmpdir, *args):
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
-    cmd = [sys.executable, "-m", "tarawasm.cli", *args]
-    subprocess.run(cmd, check=True, cwd=tmpdir, env=env)
-
-
-@pytest.mark.parametrize("lang,expected", LANG_EXPECTED.items())
-def test_examples(lang, expected, tmp_path):
-    if lang == "c" and not clang_supports_wasm():
+    if mode != "docker" and lang == "c" and not clang_supports_wasm():
         pytest.skip("clang is not built with wasm32-unknown-wasi target")
 
     wasm_src = Path(__file__).resolve().parents[1] / "examples" / lang / "docs:adder@0.1.0.wasm"
     work_dir = tmp_path
     shutil.copy(wasm_src, work_dir)
 
-    run_cli(work_dir, "init", "--lang", lang, "--wasm-file", "docs:adder@0.1.0.wasm", "adder")
-    run_cli(work_dir, "bind")
-    run_cli(work_dir, "build")
+    run_cli(work_dir, "init", "--lang", lang, "--wasm-file", "docs:adder@0.1.0.wasm", "adder", mode=mode)
+    run_cli(work_dir, "bind", mode=mode)
+    run_cli(work_dir, "build", mode=mode)
 
     wasm_file = work_dir / ("adder.component.wasm" if lang == "c" else "adder.wasm")
     result = subprocess.run([RUNTIME, str(wasm_file)], capture_output=True, text=True, check=True)
