@@ -54,6 +54,41 @@ def _merge_args(base_args: list[str], user_args: Dict[str, str | None]) -> list[
     return final
 
 
+def _make_all_writable(path: str = "."):
+    for root, dirs, files in os.walk(path):
+
+        for name in files:
+            file_path = os.path.join(root, name)
+
+            if os.path.islink(file_path) and not os.path.exists(file_path):
+                continue
+
+            os.chmod(
+                file_path,
+                stat.S_IRUSR
+                | stat.S_IWUSR
+                | stat.S_IRGRP
+                | stat.S_IWGRP
+                | stat.S_IROTH
+                | stat.S_IWOTH,
+            )
+
+        for name in dirs:
+            dir_path = os.path.join(root, name)
+            os.chmod(
+                dir_path,
+                stat.S_IRUSR
+                | stat.S_IWUSR
+                | stat.S_IXUSR
+                | stat.S_IRGRP
+                | stat.S_IWGRP
+                | stat.S_IXGRP
+                | stat.S_IROTH
+                | stat.S_IWOTH
+                | stat.S_IXOTH,
+            )
+
+
 @click.group()
 def cli() -> None:
     """tarawasm: CLI for building WebAssembly components"""
@@ -148,6 +183,7 @@ def init(
     # Save config
     conf = Config(world, lang, wit_output, src, wasm_file)
     conf.save()
+    _make_all_writable()
     click.echo("Configuration saved to 'tarawasm.json'")
 
 
@@ -213,6 +249,7 @@ def bind(ctx: click.Context) -> None:
     full_cmd = base_cmd + final_args
     click.echo(f"Running: {' '.join(full_cmd)}")
     subprocess.run(full_cmd, check=True)
+    _make_all_writable()
 
 
 @cli.command(
@@ -252,14 +289,6 @@ def build(ctx: click.Context) -> None:
         if src_path.exists():
             shutil.move(str(src_path), str(dst))
             click.echo(f"Moved {src_path} to {dst}")
-
-            for root, _, files in os.walk("."):
-                for name in files:
-                    file_path = os.path.join(root, name)
-                    os.chmod(
-                        file_path,
-                        stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH,
-                    )
         else:
             raise click.ClickException(f"WASM file '{src_path}' not found")
 
@@ -267,6 +296,7 @@ def build(ctx: click.Context) -> None:
         full_cmd = f"wasm-tools component new {world}.wasm --adapt wasi_snapshot_preview1.wasm -o {world}.component.wasm".split()
         click.echo(f"Running: {' '.join(full_cmd)}")
         subprocess.run(full_cmd, check=True)
+    _make_all_writable()
 
 
 @cli.command(
