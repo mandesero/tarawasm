@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import os
+import re
 import shutil
 import stat
 import subprocess
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List, Optional
 
 import click
 
@@ -55,6 +57,9 @@ def _merge_args(base_args: list[str], user_args: Dict[str, str | None]) -> list[
 
 
 def _make_all_writable(path: str = "."):
+    if os.getenv("INSIDE_DOCKER") != "1":
+        return
+
     for root, dirs, files in os.walk(path):
 
         for name in files:
@@ -252,6 +257,61 @@ def bind(ctx: click.Context) -> None:
     _make_all_writable()
 
 
+def extract_world_block(wit_text: str) -> str:
+    world_block_re = re.compile(r"world\s+\w+\s*\{(.*?)\}", re.DOTALL)
+    match = world_block_re.search(wit_text)
+    if not match:
+        raise ValueError("No 'world {...}' block found in the WIT file")
+    return match.group(1)
+
+
+def parse_exports_from_world_wit(wit_path: str) -> List[Dict]:
+    wit_text = Path(wit_path).read_text()
+    world_content = extract_world_block(wit_text)
+
+    export_func_re = re.compile(
+        r"""export\s+        # 'export' keyword
+            (?P<name>\w+)\s* # function name
+            :\s*func\s*      # ': func'
+            \((?P<params>[^)]*)\)  # parameters inside ()
+            \s*->\s*
+            (?P<ret>[^;]+)   # return type (everything before ';')
+        """,
+        re.VERBOSE,
+    )
+
+    functions = []
+    for match in export_func_re.finditer(world_content):
+        name = match.group("name")
+        raw_params = match.group("params").strip()
+        ret = match.group("ret").strip()
+
+        params = []
+        if raw_params:
+            for param in raw_params.split(","):
+                param = param.strip()
+                if not param:
+                    continue
+                pname, ptype = param.split(":")
+                params.append((pname.strip(), ptype.strip()))
+
+        functions.append(
+            {
+                "name": name,
+                "params": params,
+                "result": ret,
+            }
+        )
+
+    return functions
+
+
+def save_exports_to_json(exports: List[Dict], output_path: Optional[str] = None):
+    output_file = Path(output_path or "component.exports.json")
+    output_file.write_text(json.dumps(exports, indent=2))
+    click.echo(f"Exports written to {output_file}")
+
+
 @cli.command(
     context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
     add_help_option=False,
@@ -296,6 +356,12 @@ def build(ctx: click.Context) -> None:
         full_cmd = f"wasm-tools component new {world}.wasm --adapt wasi_snapshot_preview1.wasm -o {world}.component.wasm".split()
         click.echo(f"Running: {' '.join(full_cmd)}")
         subprocess.run(full_cmd, check=True)
+
+    funcs = parse_exports_from_world_wit(
+        f"wit/{world}.wit" if lang != "rust" else "wit/world.wit"
+    )
+    save_exports_to_json(funcs)
+
     _make_all_writable()
 
 

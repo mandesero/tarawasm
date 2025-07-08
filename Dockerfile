@@ -56,6 +56,8 @@ ENV PATH="${WASI_SDK_PATH}/bin:${PATH}"
 
 COPY . .
 
+ENV INSIDE_DOCKER=1
+
 # Python deps
 RUN pip3 install --no-cache-dir -r requirements.txt
 
