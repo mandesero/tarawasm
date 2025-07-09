@@ -269,39 +269,54 @@ def parse_exports_from_world_wit(wit_path: str) -> List[Dict]:
     wit_text = Path(wit_path).read_text()
     world_content = extract_world_block(wit_text)
 
+    lines = world_content.splitlines()
+
+    functions = []
+    current_doc = []
+
     export_func_re = re.compile(
-        r"""export\s+        # 'export' keyword
-            (?P<name>\w+)\s* # function name
-            :\s*func\s*      # ': func'
-            \((?P<params>[^)]*)\)  # parameters inside ()
-            \s*->\s*
-            (?P<ret>[^;]+)   # return type (everything before ';')
+        r"""^
+            \s*export\s+
+            (?P<name>\w+)\s*:\s*func\s*
+            \((?P<params>[^)]*)\)\s*->\s*
+            (?P<ret>[^;]+)\s*;
         """,
         re.VERBOSE,
     )
 
-    functions = []
-    for match in export_func_re.finditer(world_content):
-        name = match.group("name")
-        raw_params = match.group("params").strip()
-        ret = match.group("ret").strip()
+    for line in lines:
+        stripped = line.strip()
 
-        params = []
-        if raw_params:
-            for param in raw_params.split(","):
-                param = param.strip()
-                if not param:
-                    continue
-                pname, ptype = param.split(":")
-                params.append((pname.strip(), ptype.strip()))
+        if stripped.startswith("///"):
+            current_doc.append(stripped[3:].strip())
+            continue
 
-        functions.append(
-            {
+        match = export_func_re.match(line)
+        if match:
+            name = match.group("name")
+            raw_params = match.group("params").strip()
+            ret = match.group("ret").strip()
+
+            params = []
+            if raw_params:
+                for param in raw_params.split(","):
+                    param = param.strip()
+                    if not param:
+                        continue
+                    pname, ptype = param.split(":")
+                    params.append((pname.strip(), ptype.strip()))
+
+            func = {
                 "name": name,
                 "params": params,
                 "result": ret,
             }
-        )
+
+            if current_doc:
+                func["doc"] = "\n".join(current_doc)
+                current_doc = []
+
+            functions.append(func)
 
     return functions
 
