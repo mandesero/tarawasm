@@ -277,7 +277,7 @@ def parse_exports_from_world_wit(wit_path: str) -> List[Dict]:
     export_func_re = re.compile(
         r"""^
             \s*export\s+
-            (?P<name>\w+)\s*:\s*func\s*
+            (?P<name>[a-zA-Z0-9_-]+)\s*:\s*func\s*
             \((?P<params>[^)]*)\)\s*->\s*
             (?P<ret>[^;]+)\s*;
         """,
