@@ -258,11 +258,42 @@ def bind(ctx: click.Context) -> None:
 
 
 def extract_world_block(wit_text: str) -> str:
-    world_block_re = re.compile(r"world\s+\w+\s*\{(.*?)\}", re.DOTALL)
-    match = world_block_re.search(wit_text)
-    if not match:
-        raise ValueError("No 'world {...}' block found in the WIT file")
-    return match.group(1)
+    world_start = re.search(r"\bworld\s+\w+\s*{", wit_text)
+    if not world_start:
+        raise click.ClickException("No 'world { ... }' block found in the WIT file")
+
+    start_idx = world_start.end()  # position after the opening {
+    brace_count = 1
+    i = start_idx
+    while i < len(wit_text):
+        if wit_text[i] == "{":
+            brace_count += 1
+        elif wit_text[i] == "}":
+            brace_count -= 1
+            if brace_count == 0:
+                return wit_text[world_start.end() : i]
+        i += 1
+
+    raise click.ClickException("Unclosed 'world { ... }' block in the WIT file")
+
+
+def split_top_level_commas(s: str) -> List[str]:
+    parts = []
+    buf = ""
+    depth = 0
+    for c in s:
+        if c == "," and depth == 0:
+            parts.append(buf.strip())
+            buf = ""
+        else:
+            if c in "(<[{":
+                depth += 1
+            elif c in ")>]}":
+                depth -= 1
+            buf += c
+    if buf:
+        parts.append(buf.strip())
+    return parts
 
 
 def parse_exports_from_world_wit(wit_path: str) -> List[Dict]:
@@ -299,11 +330,12 @@ def parse_exports_from_world_wit(wit_path: str) -> List[Dict]:
 
             params = []
             if raw_params:
-                for param in raw_params.split(","):
-                    param = param.strip()
+                for param in split_top_level_commas(raw_params):
                     if not param:
                         continue
-                    pname, ptype = param.split(":")
+                    if ":" not in param:
+                        raise ValueError(f"Invalid parameter format: {param}")
+                    pname, ptype = param.split(":", 1)
                     params.append((pname.strip(), ptype.strip()))
 
             func = {
