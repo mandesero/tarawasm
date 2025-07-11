@@ -308,9 +308,10 @@ def parse_exports_from_world_wit(wit_path: str) -> List[Dict]:
     export_func_re = re.compile(
         r"""^
             \s*export\s+
-            (?P<name>[a-zA-Z0-9_-]+)\s*:\s*func\s*
-            \((?P<params>[^)]*)\)\s*->\s*
-            (?P<ret>[^;]+)\s*;
+            (?P<name>[a-zA-Z0-9_-]+)\s*:\s*func
+            \s*\((?P<params>[^)]*)\)\s*
+            (?:->\s*(?P<ret>[^;]+))?
+            \s*;
         """,
         re.VERBOSE,
     )
@@ -326,7 +327,7 @@ def parse_exports_from_world_wit(wit_path: str) -> List[Dict]:
         if match:
             name = match.group("name")
             raw_params = match.group("params").strip()
-            ret = match.group("ret").strip()
+            ret = match.group("ret").strip() if match.group("ret") else None
 
             params = []
             if raw_params:
