@@ -44,7 +44,7 @@ RUN apt-get remove -y nodejs npm libnode-dev || true && \
     rm -rf /var/lib/apt/lists/*
 
 # JS tooling
-RUN npm install -g @bytecodealliance/jco@latest @bytecodealliance/componentize-js@latest
+RUN npm install -g @bytecodealliance/jco@1.9.1 @bytecodealliance/componentize-js@0.18.2
 
 # WASI SDK
 RUN curl -L https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/wasi-sdk-25.0-x86_64-linux.deb -o wasi.deb && \
