@@ -183,7 +183,8 @@ def init(
     content = tpl.replace("${world}", world)
 
     out = Path(src)
-    out.write_text(content)
+    if not out.exists() or lang == "rust":
+        out.write_text(content)
 
     # Save config
     conf = Config(world, lang, wit_output, src, wasm_file)
