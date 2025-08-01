@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import json
 import os
-import re
 import shutil
 import stat
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict
 
 import click
 
@@ -258,109 +256,6 @@ def bind(ctx: click.Context) -> None:
     _make_all_writable()
 
 
-def extract_world_block(wit_text: str) -> str:
-    world_start = re.search(r"\bworld\s+\w+\s*{", wit_text)
-    if not world_start:
-        raise click.ClickException("No 'world { ... }' block found in the WIT file")
-
-    start_idx = world_start.end()  # position after the opening {
-    brace_count = 1
-    i = start_idx
-    while i < len(wit_text):
-        if wit_text[i] == "{":
-            brace_count += 1
-        elif wit_text[i] == "}":
-            brace_count -= 1
-            if brace_count == 0:
-                return wit_text[world_start.end() : i]
-        i += 1
-
-    raise click.ClickException("Unclosed 'world { ... }' block in the WIT file")
-
-
-def split_top_level_commas(s: str) -> List[str]:
-    parts = []
-    buf = ""
-    depth = 0
-    for c in s:
-        if c == "," and depth == 0:
-            parts.append(buf.strip())
-            buf = ""
-        else:
-            if c in "(<[{":
-                depth += 1
-            elif c in ")>]}":
-                depth -= 1
-            buf += c
-    if buf:
-        parts.append(buf.strip())
-    return parts
-
-
-def parse_exports_from_world_wit(wit_path: str) -> List[Dict]:
-    wit_text = Path(wit_path).read_text()
-    world_content = extract_world_block(wit_text)
-
-    lines = world_content.splitlines()
-
-    functions = []
-    current_doc = []
-
-    export_func_re = re.compile(
-        r"""^
-            \s*export\s+
-            (?P<name>[a-zA-Z0-9_-]+)\s*:\s*func
-            \s*\((?P<params>[^)]*)\)\s*
-            (?:->\s*(?P<ret>[^;]+))?
-            \s*;
-        """,
-        re.VERBOSE,
-    )
-
-    for line in lines:
-        stripped = line.strip()
-
-        if stripped.startswith("///"):
-            current_doc.append(stripped[3:].strip())
-            continue
-
-        match = export_func_re.match(line)
-        if match:
-            name = match.group("name")
-            raw_params = match.group("params").strip()
-            ret = match.group("ret").strip() if match.group("ret") else None
-
-            params = []
-            if raw_params:
-                for param in split_top_level_commas(raw_params):
-                    if not param:
-                        continue
-                    if ":" not in param:
-                        raise ValueError(f"Invalid parameter format: {param}")
-                    pname, ptype = param.split(":", 1)
-                    params.append((pname.strip(), ptype.strip()))
-
-            func = {
-                "name": name,
-                "params": params,
-                "result": ret,
-            }
-
-            if current_doc:
-                func["doc"] = "\n".join(current_doc)
-                current_doc = []
-
-            functions.append(func)
-
-    return functions
-
-
-def save_exports_to_json(exports: List[Dict], output_path: Optional[str] = None):
-    output_file = Path(output_path or "component.exports.json")
-    output_file.write_text(json.dumps(exports, indent=2))
-    click.echo(f"Exports written to {output_file}")
-
-
 @cli.command(
     context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
     add_help_option=False,
@@ -405,11 +300,6 @@ def build(ctx: click.Context) -> None:
         full_cmd = f"wasm-tools component new {world}.wasm --adapt wasi_snapshot_preview1.wasm -o {world}.component.wasm".split()
         click.echo(f"Running: {' '.join(full_cmd)}")
         subprocess.run(full_cmd, check=True)
-
-    funcs = parse_exports_from_world_wit(
-        f"wit/{world}.wit" if lang != "rust" else "wit/world.wit"
-    )
-    save_exports_to_json(funcs)
 
     _make_all_writable()
 
