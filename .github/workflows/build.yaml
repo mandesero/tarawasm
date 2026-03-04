@@ -17,7 +17,25 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo make install
-          echo "/opt/wasi-sdk/bin" >> $GITHUB_PATH
+          echo "PATH=/usr/local/go/bin:/opt/wasi-sdk/bin:/usr/bin:${PATH}" >> $GITHUB_ENV
+          echo "GOROOT=/usr/local/go" >> $GITHUB_ENV
+
+      - name: Debug Toolchain in PATH
+        run: |
+          echo "$PATH"
+          ls -l /opt/wasi-sdk/bin/clang
+          which go
+          go version
+          which node
+          node --version
+          which npm
+          npm --version
+          npm root -g
+          which jco || true
+          jco --version || true
+          npm list -g --depth=0 @bytecodealliance/jco @bytecodealliance/componentize-js @bytecodealliance/preview2-shim || true
+          which clang
+          clang --version
 
       - name: Verify system toolchain
         run: make system-check
