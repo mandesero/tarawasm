@@ -17,12 +17,12 @@ A simple CLI for WebAssembly component workflow.
 - [Quickstart](#quickstart)
 - [Manual installation](#manual-installation)
   - [1. System packages (Debian/Ubuntu)](#1-system-packages-debianubuntu)
-  - [2. Go 1.24.3](#2-go-1243)
+  - [2. Go 1.26.0](#2-go-1260)
   - [3. Rust](#3-rust)
   - [4. TinyGo](#4-tinygo)
   - [5. Python packages](#5-python-packages)
   - [6. WASM tools (Cargo)](#6-wasm-tools-cargo)
-  - [7. Node.js 22.x](#7-nodejs-22x)
+  - [7. Node.js 24.x](#7-nodejs-24x)
   - [8. JavaScript tools (npm)](#8-javascript-tools-npm)
   - [9. WASI SDK](#9-wasi-sdk)
 - [Using Docker](#using-docker)
@@ -48,12 +48,12 @@ make install
 This will:
 
 * Install system packages (via `apt-get`)
-* Install Go 1.24.3
+* Install Go 1.26.0
 * Install Rust (via `rustup`)
-* Install TinyGo 0.37.0
+* Install TinyGo 0.40.1
 * Install Python packages from `requirements.txt`
-* Install WASM tools (`wkg`, `wasm-tools`, `cargo-component`)
-* Install Node.js 22.x and JS tools (`jco`, `componentize-js`)
+* Install WASM tools (`wkg`, `wasm-tools`, `cargo-component`, `wit-bindgen-cli`)
+* Install Node.js 24.x and JS tools (`jco`, `componentize-js`)
 
 2. **Verify your setup**
 
@@ -64,7 +64,7 @@ make check
 Runs both:
 
 * `make system-check` — checks Go, Rust, TinyGo, Node.js, Python, clang (wasi-sdk)
-* `make sdk-check` — checks installed CLI tools (`jco`, `wkg`, `wasm-tools`, `cargo-component`) and Python packages
+* `make sdk-check` — checks installed CLI tools (`jco`, `componentize-js`, `wkg`, `wasm-tools`, `cargo-component`, `wit-bindgen`) and Python packages
 
 3. **Build your project**
 
@@ -87,13 +87,13 @@ sudo apt-get install -y \
   lld llvm patchelf python3 python3-dev python3-pip wget
 ```
 
-### 2. Go 1.24.3
+### 2. Go 1.26.0
 
 ```bash
-wget https://go.dev/dl/go1.24.3.linux-amd64.tar.gz
+wget https://go.dev/dl/go1.26.0.linux-amd64.tar.gz
 sudo rm -rf /usr/local/go
-sudo tar -C /usr/local -xzf go1.24.3.linux-amd64.tar.gz
-rm go1.24.3.linux-amd64.tar.gz
+sudo tar -C /usr/local -xzf go1.26.0.linux-amd64.tar.gz
+rm go1.26.0.linux-amd64.tar.gz
 export PATH="/usr/local/go/bin:$PATH"
 ```
 
@@ -102,14 +102,16 @@ export PATH="/usr/local/go/bin:$PATH"
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 . "$HOME/.cargo/env"
+rustup update stable
+rustup default stable
 ```
 
 ### 4. TinyGo
 
 ```bash
-wget https://github.com/tinygo-org/tinygo/releases/download/v0.37.0/tinygo_0.37.0_amd64.deb
-sudo dpkg -i tinygo_0.37.0_amd64.deb
-rm tinygo_0.37.0_amd64.deb
+wget https://github.com/tinygo-org/tinygo/releases/download/v0.40.1/tinygo_0.40.1_amd64.deb
+sudo dpkg -i tinygo_0.40.1_amd64.deb
+rm tinygo_0.40.1_amd64.deb
 ```
 
 ### 5. Python packages
@@ -122,31 +124,32 @@ python3 -m pip install --no-cache-dir -r requirements.txt
 ### 6. WASM tools (Cargo)
 
 ```bash
-cargo install --locked --root /usr/local wkg --version 0.10.0
-cargo install --locked --root /usr/local wasm-tools
+cargo install --locked --root /usr/local wkg --version 0.15.0
+cargo install --locked --root /usr/local wasm-tools --version 1.245.1
 cargo install --locked --root /usr/local cargo-component --version 0.21.1
+cargo install --locked --root /usr/local wit-bindgen-cli --version 0.53.1
 ```
 
-### 7. Node.js 22.x
+### 7. Node.js 24.x
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt-get install -y nodejs
 ```
 
 ### 8. JavaScript tools (npm)
 
 ```bash
-npm install -g @bytecodealliance/jco@1.9.1 \
-               @bytecodealliance/componentize-js@0.7.0
+npm install -g @bytecodealliance/jco@1.17.0 \
+               @bytecodealliance/componentize-js@0.19.3
 ```
 
 ### 9. WASI SDK
 
 ```bash
-wget -q https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/wasi-sdk-25.0-x86_64-linux.deb
-sudo apt install -y ./wasi-sdk-25.0-x86_64-linux.deb
-rm wasi-sdk-25.0-x86_64-linux.deb
+wget -q https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-30/wasi-sdk-30.0-x86_64-linux.deb
+sudo apt install -y ./wasi-sdk-30.0-x86_64-linux.deb
+rm wasi-sdk-30.0-x86_64-linux.deb
 
 # Add /opt/wasi-sdk/bin to PATH
 export WASI_SDK_PATH=/opt/wasi-sdk

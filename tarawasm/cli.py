@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -167,9 +168,15 @@ def init(
             click.echo("Initializing Go module...")
             subprocess.run(["go", "mod", "init", f"{world}-wasm-bindings"], check=True)
             subprocess.run(
-                ["go", "get", "go.bytecodealliance.org/cmd/wit-bindgen-go"], check=True
+                [
+                    "go",
+                    "get",
+                    "-tool",
+                    "go.bytecodealliance.org/cmd/wit-bindgen-go@v0.7.0",
+                ],
+                check=True,
             )
-            subprocess.run(["go", "get", "go.bytecodealliance.org/cm"], check=True)
+            subprocess.run(["go", "get", "go.bytecodealliance.org@v0.7.0"], check=True)
 
     click.echo(f"Extracting WIT from '{wasm_file}' to '{out_wit}'...")
     with open(out_wit, "w") as f:
@@ -285,7 +292,19 @@ def build(ctx: click.Context) -> None:
 
     full_cmd = base_cmd + final_args
     click.echo(f"Running: {' '.join(full_cmd)}")
-    subprocess.run(full_cmd, check=True)
+    run_env = os.environ.copy()
+    if lang == "go" and "GOTOOLCHAIN" not in run_env:
+        try:
+            go_version = subprocess.check_output(["go", "version"], text=True)
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            go_version = ""
+        match = re.search(r"\bgo1\.(\d+)", go_version)
+        if match and int(match.group(1)) >= 26:
+            # TinyGo 0.40.x requires the Go 1.25 toolchain for guest builds.
+            run_env["GOTOOLCHAIN"] = "go1.25.4+auto"
+            click.echo("Detected Go 1.26+, using GOTOOLCHAIN=go1.25.4+auto for TinyGo.")
+
+    subprocess.run(full_cmd, check=True, env=run_env)
 
     if lang == "rust":
         src_path = Path("target/wasm32-wasip1/release") / f"{world}.wasm"

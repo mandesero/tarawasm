@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Go manually
 RUN rm -rf /usr/local/go && \
-    curl -L https://go.dev/dl/go1.24.3.linux-amd64.tar.gz -o go.tar.gz && \
+    curl -L https://go.dev/dl/go1.26.0.linux-amd64.tar.gz -o go.tar.gz && \
     tar -C /usr/local -xzf go.tar.gz && \
     rm go.tar.gz
 ENV PATH="/usr/local/go/bin:${PATH}"
@@ -27,27 +27,33 @@ RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Install TinyGo
-RUN curl -L https://github.com/tinygo-org/tinygo/releases/download/v0.37.0/tinygo_0.37.0_amd64.deb -o tinygo.deb && \
+RUN curl -L https://github.com/tinygo-org/tinygo/releases/download/v0.40.1/tinygo_0.40.1_amd64.deb -o tinygo.deb && \
     dpkg -i tinygo.deb && \
     rm tinygo.deb
 
 # WASM tools
-RUN cargo install wkg wasm-tools cargo-component wit-bindgen-cli
+RUN cargo install --locked wkg --version 0.15.0 && \
+    cargo install --locked wasm-tools --version 1.245.1 && \
+    cargo install --locked cargo-component --version 0.21.1 && \
+    cargo install --locked wit-bindgen-cli --version 0.53.1
 
-# Node.js 22.x
+# Node.js 24.x (LTS)
 RUN apt-get remove -y nodejs npm libnode-dev || true && \
     apt-get autoremove -y && \
     apt-get clean && \
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
     apt-get update && \
-    apt-get install -y --no-install-recommends nodejs=22.* && \
+    apt-get install -y --no-install-recommends nodejs=24.* && \
     rm -rf /var/lib/apt/lists/*
 
 # JS tooling
-RUN npm install -g @bytecodealliance/jco@1.9.1 @bytecodealliance/componentize-js@0.18.2
+RUN npm install -g \
+    @bytecodealliance/jco@1.17.0 \
+    @bytecodealliance/componentize-js@0.19.3 \
+    @bytecodealliance/preview2-shim@0.17.8
 
 # WASI SDK
-RUN curl -L https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/wasi-sdk-25.0-x86_64-linux.deb -o wasi.deb && \
+RUN curl -L https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-30/wasi-sdk-30.0-x86_64-linux.deb -o wasi.deb && \
     apt-get install -y --no-install-recommends ./wasi.deb && \
     rm wasi.deb && \
     rm -rf /var/lib/apt/lists/*

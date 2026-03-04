@@ -2,10 +2,10 @@
 set -euo pipefail
 
 declare -A REQUIRED_VERSIONS=(
-  [go]=1.20.0
-  [rustc]=1.84.1
-  [tinygo]=0.37.0
-  [node]=20.0.0
+  [go]=1.26.0
+  [rustc]=1.93.1
+  [tinygo]=0.40.1
+  [node]=24.0.0
   [python3]=3.10.0
   [clang]=19.1.5
 )

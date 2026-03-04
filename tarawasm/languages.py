@@ -16,13 +16,8 @@ def bind_args(lang: str, conf: Config) -> Tuple[List[str], List[str]]:
         cmd = ["componentize-py"]
         args = [f"{cfg['wit-flag']}={wit_path}", f"--world={world}", "bindings", "."]
     elif lang == "go":
-        cmd = [
-            "go",
-            "run",
-            "go.bytecodealliance.org/cmd/wit-bindgen-go",
-            "generate",
-        ]
-        args = ["-o", "internal/", wit_path]
+        cmd = ["go", "tool", "wit-bindgen-go"]
+        args = ["generate", "--world", world, "-o", "internal", wit_path]
     elif lang == "js":
         cmd = ["jco", "guest-types"]
         args = ["-o", "internal", wit_path]
@@ -43,7 +38,6 @@ def build_args(lang: str, conf: Config) -> Tuple[List[str], List[str]]:
     world = conf.world
     src = conf.src_file
     wit_path = str(conf.wit_path)
-    wasm_file = conf.wasm_file
 
     if lang == "python":
         cmd = ["componentize-py"]
@@ -62,7 +56,7 @@ def build_args(lang: str, conf: Config) -> Tuple[List[str], List[str]]:
             "-o",
             f"{world}.wasm",
             "--wit-package",
-            wasm_file,
+            wit_path,
             "--wit-world",
             world,
             src,
@@ -78,7 +72,9 @@ def build_args(lang: str, conf: Config) -> Tuple[List[str], List[str]]:
             "--out",
             f"{world}.wasm",
             "--disable",
-            "http",
+            "all",
+            "--enable",
+            "stdio",
         ]
     elif lang == "rust":
         cmd = ["cargo", "component", "build"]
