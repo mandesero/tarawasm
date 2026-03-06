@@ -4,7 +4,6 @@ from pathlib import Path
 import pytest
 from utils import (
     CLI_MODES,
-    RUNTIME,
     clang_supports_wasm,
     cli_mode_available,
     run_cli,
@@ -13,16 +12,14 @@ from utils import (
 
 LANGS = ["python", "go", "js", "rust", "c"]
 
-pytestmark = pytest.mark.skipif(
-    not runtime_available(), reason=f"'{RUNTIME}' runtime is not available"
-)
-
 
 @pytest.mark.parametrize("mode", CLI_MODES, ids=lambda m: f"cli:{m}")
 @pytest.mark.parametrize("lang", LANGS, ids=lambda x: f"lang:{x}")
 def test_strip_reduces_size(lang, tmp_path, mode):
     if not cli_mode_available(mode):
         pytest.skip(f"CLI mode '{mode}' not available in this environment")
+    if not runtime_available(mode):
+        pytest.skip("Runtime is not available for this mode")
 
     if mode != "docker" and lang == "c" and not clang_supports_wasm():
         pytest.skip("clang is not built with wasm32-unknown-wasi target")

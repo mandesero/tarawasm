@@ -1,14 +1,13 @@
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 from utils import (
     CLI_MODES,
-    RUNTIME,
     clang_supports_wasm,
     cli_mode_available,
     run_cli,
+    run_runtime,
     runtime_available,
 )
 
@@ -20,16 +19,13 @@ LANG_EXPECTED = {
     "c": "Hello from C WASM!",
 }
 
-
-pytestmark = pytest.mark.skipif(
-    not runtime_available(), reason=f"'{RUNTIME}' runtime is not available"
-)
-
 @pytest.mark.parametrize("mode", CLI_MODES, ids=lambda m: f"cli:{m}")
 @pytest.mark.parametrize("lang,expected", LANG_EXPECTED.items(), ids=lambda x: f"lang:{x}")
 def test_examples(lang, expected, tmp_path, mode):
     if not cli_mode_available(mode):
         pytest.skip(f"CLI mode '{mode}' not available in this environment")
+    if not runtime_available(mode):
+        pytest.skip("Runtime is not available for this mode")
 
     if mode != "docker" and lang == "c" and not clang_supports_wasm():
         pytest.skip("clang is not built with wasm32-unknown-wasi target")
@@ -43,5 +39,5 @@ def test_examples(lang, expected, tmp_path, mode):
     run_cli(work_dir, "build", mode=mode)
 
     wasm_file = work_dir / ("adder.component.wasm" if lang == "c" else "adder.wasm")
-    result = subprocess.run([RUNTIME, str(wasm_file)], capture_output=True, text=True, check=True)
+    result = run_runtime(work_dir, wasm_file, mode=mode)
     assert result.stdout.strip() == expected
