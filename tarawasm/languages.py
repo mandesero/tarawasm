@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import List, Tuple
 
@@ -56,10 +57,17 @@ def build_args(
 
     if lang == "python":
         cmd = ["componentize-py"]
+        python_paths: list[str] = []
+        persistent_site_packages = os.environ.get("TARAWASM_PY_SITE_PACKAGES")
+        if persistent_site_packages:
+            # `componentize-py` does not inherit regular PYTHONPATH during componentization.
+            python_paths.extend(["--python-path", "."])
+            python_paths.extend(["--python-path", persistent_site_packages])
         args = [
             f"{cfg['wit-flag']}={wit_path}",
             f"--world={world}",
             "componentize",
+            *python_paths,
             Path(src).stem,
             "-o",
             out,
