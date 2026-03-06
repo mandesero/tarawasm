@@ -54,19 +54,22 @@ def run_cli(tmpdir, *args, mode="python"):
         cmd = [sys.executable, "-m", "tarawasm.cli", *args]
     elif mode == "docker":
         docker_image = os.environ.get("TARAWASM_DOCKER_IMAGE", _BASE_DOCKER_IMAGE)
+        docker_platform = os.environ.get("TARAWASM_DOCKER_PLATFORM")
         if not cli_mode_available("docker"):
             raise RuntimeError(f"Docker image '{docker_image}' not found locally.")
-        cmd = [
-            "docker",
-            "run",
-            "--rm",
-            "-v",
-            f"{workdir}:/work",
-            "-w",
-            "/work",
-            docker_image,
-            *args,
-        ]
+        cmd = ["docker", "run", "--rm"]
+        if docker_platform:
+            cmd.extend(["--platform", docker_platform])
+        cmd.extend(
+            [
+                "-v",
+                f"{workdir}:/work",
+                "-w",
+                "/work",
+                docker_image,
+                *args,
+            ]
+        )
     elif mode == "standalone":
         if not cli_mode_available("standalone"):
             raise RuntimeError("Standalone binary 'tarawasm' not found in PATH.")

@@ -312,3 +312,20 @@ Run tests:
 ```bash
 pytest
 ```
+
+Run docker-mode tests on an explicit `linux/amd64` image:
+
+```bash
+make test-docker-amd64
+```
+
+Manual equivalent:
+
+```bash
+docker buildx build --platform linux/amd64 --load -t tarawasm:test-amd64 .
+TARAWASM_DOCKER_IMAGE=tarawasm:test-amd64 \
+TARAWASM_DOCKER_PLATFORM=linux/amd64 \
+WASM_RUNTIME=wasmtime \
+PYTHONPATH=. \
+python3 -m pytest -k "cli:docker" -vv
+```
