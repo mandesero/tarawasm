@@ -8,8 +8,15 @@ if [ "${1:-}" == "pip" ]; then
     exec pip "$@"
 fi
 
-# Allow explicit tools/commands inside the container.
-if [ "${1:-}" == "wasmtime" ] || [ "${1:-}" == "python3" ] || [ "${1:-}" == "pytest" ] || [ "${1:-}" == "bash" ] || [ "${1:-}" == "sh" ]; then
+# Keep explicit tarawasm subcommands routed through the CLI module.
+case "${1:-}" in
+    ""|init|bind|build|clean|all|strip|--help|-h)
+        exec python3 -m tarawasm.cli "$@"
+        ;;
+esac
+
+# Allow explicit tools/commands inside the container when first token resolves to a binary.
+if [ -n "${1:-}" ] && [ "$(type -t "$1" || true)" = "file" ]; then
     exec "$@"
 fi
 

@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from utils import run_cli, run_runtime, runtime_available
+from utils import run_cli, run_runtime, run_tool, runtime_available
 
 
 def test_run_cli_docker_adds_platform_when_configured(monkeypatch, tmp_path):
@@ -78,3 +78,32 @@ def test_run_runtime_uses_docker_when_enabled(monkeypatch, tmp_path):
     assert captured["capture_output"] is True
     assert captured["text"] is True
     assert captured["check"] is True
+
+
+def test_run_tool_uses_docker_prefix(monkeypatch, tmp_path):
+    captured = {}
+
+    monkeypatch.setenv("TARAWASM_DOCKER_IMAGE", "tarawasm:test")
+    monkeypatch.setenv("TARAWASM_DOCKER_PLATFORM", "linux/amd64")
+    monkeypatch.setattr("utils.cli_mode_available", lambda mode: mode == "docker")
+
+    def fake_run(cmd, check, cwd, capture_output, text):
+        captured["cmd"] = cmd
+        captured["check"] = check
+        captured["cwd"] = Path(cwd)
+        captured["capture_output"] = capture_output
+        captured["text"] = text
+        return type("Result", (), {"stdout": "ok"})()
+
+    monkeypatch.setattr("utils.subprocess.run", fake_run)
+
+    run_tool(
+        tmp_path, "wkg", "wit", "build", mode="docker", capture_output=True, text=True
+    )
+
+    assert captured["cmd"][:5] == ["docker", "run", "--rm", "--platform", "linux/amd64"]
+    assert captured["cmd"][-4:] == ["tarawasm:test", "wkg", "wit", "build"]
+    assert captured["check"] is True
+    assert captured["cwd"] == Path(tmp_path)
+    assert captured["capture_output"] is True
+    assert captured["text"] is True

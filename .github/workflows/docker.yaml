@@ -57,3 +57,12 @@ jobs:
         run: |
           pip install --no-cache-dir pytest
           python3 -m pytest -k "cli:docker"
+
+      - name: Run upstream tool-repo integration tests
+        env:
+          TARAWASM_DOCKER_IMAGE: ${{ steps.vars.outputs.tags }}
+          TARAWASM_DOCKER_PLATFORM: linux/amd64
+          TARAWASM_UPSTREAM_MODE: docker
+          TARAWASM_UPSTREAM_IT: "1"
+          PYTHONPATH: ${{ github.workspace }}
+        run: python3 -m pytest tests/test_upstream_tool_repos.py -vv
