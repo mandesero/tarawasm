@@ -103,3 +103,28 @@ def run_runtime(tmpdir, wasm_file, mode="python"):
     return subprocess.run(
         [RUNTIME, str(wasm_path)], capture_output=True, text=True, check=True
     )
+
+
+def run_tool(
+    tmpdir,
+    *args,
+    mode="python",
+    capture_output=False,
+    text=False,
+):
+    workdir = Path(tmpdir).resolve()
+    if mode == "docker":
+        docker_image = os.environ.get("TARAWASM_DOCKER_IMAGE", _BASE_DOCKER_IMAGE)
+        if not cli_mode_available("docker"):
+            raise RuntimeError(f"Docker image '{docker_image}' not found locally.")
+        cmd = _docker_run_prefix(workdir) + [docker_image, *args]
+    else:
+        cmd = list(args)
+
+    return subprocess.run(
+        cmd,
+        check=True,
+        cwd=tmpdir,
+        capture_output=capture_output,
+        text=text,
+    )
