@@ -260,13 +260,14 @@ def bind(
         conf,
         world_override=world,
         wit_override=wit_path,
+        tool_args=list(tool_args),
     )
 
     if tool_help:
         subprocess.run(base_cmd + ["--help"], check=False)
         return
 
-    full_cmd = base_cmd + base_args + list(tool_args)
+    full_cmd = base_cmd + base_args
     click.echo(f"Running: {' '.join(full_cmd)}")
     subprocess.run(full_cmd, check=True)
     _make_all_writable()
@@ -350,6 +351,7 @@ def build(
         wit_override=wit_path,
         src_override=src_file,
         out_override=resolved_out,
+        tool_args=list(tool_args),
     )
 
     if tool_help:
@@ -359,7 +361,7 @@ def build(
     if run_clean:
         ctx.invoke(clean)
 
-    full_cmd = base_cmd + base_args + list(tool_args)
+    full_cmd = base_cmd + base_args
     click.echo(f"Running: {' '.join(full_cmd)}")
     run_env = os.environ.copy()
     if lang == "go" and "GOTOOLCHAIN" not in run_env:
