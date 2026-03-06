@@ -220,10 +220,34 @@ tarawasm init --lang <language> --wasm-file <your-wasm-file> \
 tarawasm bind
 ```
 
+Common overrides (for one run only):
+
+```bash
+tarawasm bind --world <world> --wit <wit-path>
+```
+
+Language-specific options are passed separately after `--`:
+
+```bash
+tarawasm bind --world <world> -- --tool-specific-flag value
+```
+
 ### Building the WASM component
 
 ```bash
 tarawasm build
+```
+
+Common overrides (for one run only):
+
+```bash
+tarawasm build --world <world> --src <src-file> --wit <wit-path> --out <output.wasm> --clean
+```
+
+Language-specific options are passed separately after `--`:
+
+```bash
+tarawasm build --out <output.wasm> -- --tool-specific-flag value
 ```
 
 ## Available Commands

@@ -6,7 +6,6 @@ import shutil
 import stat
 import subprocess
 from pathlib import Path
-from typing import Dict
 
 import click
 
@@ -18,41 +17,6 @@ from tarawasm.config import (
     load_template,
 )
 from tarawasm.languages import bind_args, build_args
-
-
-def _parse_extra_args(args: list[str]) -> Dict[str, str | None]:
-    extras: Dict[str, str | None] = {}
-    for arg in args:
-        if "=" in arg:
-            key, val = arg.split("=", 1)
-            extras[key] = val
-        else:
-            extras[arg] = None
-    return extras
-
-
-def _merge_args(base_args: list[str], user_args: Dict[str, str | None]) -> list[str]:
-    final: list[str] = []
-    for arg in base_args:
-        if "=" in arg:
-            key, val = arg.split("=", 1)
-            if key in user_args:
-                new_val = user_args.pop(key)
-                final.append(f"{key}={new_val}")
-            else:
-                final.append(arg)
-        elif arg in user_args:
-            user_args.pop(arg)
-            final.append(arg)
-        else:
-            final.append(arg)
-
-    for key, val_ in user_args.items():
-        if val_ is None:
-            final.append(key)
-        else:
-            final.append(f"{key}={val_}")
-    return final
 
 
 def _make_all_writable(path: str = "."):
@@ -230,34 +194,61 @@ def clean(ctx: click.Context) -> None:
         click.echo(f"Clean not implemented for {lang}")
         return
 
+    input_wasm_name = Path(wasm_file).name
     for item in Path(".").glob("*.wasm"):
-        if item != wasm_file:
+        if item.name != input_wasm_name:
             item.unlink()
 
 
 @cli.command(
     context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
-    add_help_option=False,
+)
+@click.option(
+    "--world",
+    default=None,
+    help="Override world name from tarawasm.json for this run",
+)
+@click.option(
+    "--wit",
+    "wit_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Override WIT path from tarawasm.json for this run",
+)
+@click.option(
+    "--tool-help",
+    is_flag=True,
+    help="Show help from the language-specific binding tool and exit",
 )
 @click.pass_context
-def bind(ctx: click.Context) -> None:
-    """Generate bindings from WIT."""
+def bind(
+    ctx: click.Context,
+    world: str | None,
+    wit_path: Path | None,
+    tool_help: bool,
+) -> None:
+    """Generate bindings from WIT.
+
+    Language-specific options can be passed after '--'.
+    """
     try:
         conf = Config.load()
     except ConfigError as e:
         raise click.ClickException(str(e))
 
     lang = conf.lang
-    base_cmd, base_args = bind_args(lang, conf)
+    base_cmd, base_args = bind_args(
+        lang,
+        conf,
+        world_override=world,
+        wit_override=wit_path,
+    )
 
-    if "--help" in ctx.args or "-h" in ctx.args:
+    if tool_help:
         subprocess.run(base_cmd + ["--help"], check=False)
         return
 
-    user_args = _parse_extra_args(ctx.args)
-    final_args = _merge_args(base_args, user_args)
-
-    full_cmd = base_cmd + final_args
+    full_cmd = base_cmd + base_args + list(ctx.args)
     click.echo(f"Running: {' '.join(full_cmd)}")
     subprocess.run(full_cmd, check=True)
     _make_all_writable()
@@ -265,32 +256,87 @@ def bind(ctx: click.Context) -> None:
 
 @cli.command(
     context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
-    add_help_option=False,
+)
+@click.option(
+    "--world",
+    default=None,
+    help="Override world name from tarawasm.json for this run",
+)
+@click.option(
+    "--src",
+    "src_file",
+    default=None,
+    help="Override source file from tarawasm.json for this run",
+)
+@click.option(
+    "--wit",
+    "wit_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Override WIT path from tarawasm.json for this run",
+)
+@click.option(
+    "--out",
+    "out_file",
+    default=None,
+    help="Output WASM file (for C this is the final component output)",
+)
+@click.option(
+    "--clean",
+    "run_clean",
+    is_flag=True,
+    help="Run clean before build",
+)
+@click.option(
+    "--tool-help",
+    is_flag=True,
+    help="Show help from the language-specific build tool and exit",
 )
 @click.pass_context
-def build(ctx: click.Context) -> None:
-    """Compile source to wasm component."""
+def build(
+    ctx: click.Context,
+    world: str | None,
+    src_file: str | None,
+    wit_path: Path | None,
+    out_file: str | None,
+    run_clean: bool,
+    tool_help: bool,
+) -> None:
+    """Compile source to wasm component.
+
+    Language-specific options can be passed after '--'.
+    """
     try:
         conf = Config.load()
     except ConfigError as e:
         raise click.ClickException(str(e))
 
     lang = conf.lang
-    world = conf.world
+    resolved_world = world or conf.world
+    resolved_out = out_file or (
+        f"{resolved_world}.component.wasm" if lang == "c" else f"{resolved_world}.wasm"
+    )
 
-    base_cmd, base_args = build_args(lang, conf)
+    if run_clean:
+        ctx.invoke(clean)
 
     if lang not in LANG_CFGS:
         raise click.ClickException(f"Unsupported lang: {lang}")
 
-    if "--help" in ctx.args or "-h" in ctx.args:
+    base_cmd, base_args = build_args(
+        lang,
+        conf,
+        world_override=resolved_world,
+        wit_override=wit_path,
+        src_override=src_file,
+        out_override=resolved_out,
+    )
+
+    if tool_help:
         subprocess.run(base_cmd + ["--help"], check=False)
         return
 
-    user_args = _parse_extra_args(ctx.args)
-    final_args = _merge_args(base_args, user_args)
-
-    full_cmd = base_cmd + final_args
+    full_cmd = base_cmd + base_args + list(ctx.args)
     click.echo(f"Running: {' '.join(full_cmd)}")
     run_env = os.environ.copy()
     if lang == "go" and "GOTOOLCHAIN" not in run_env:
@@ -307,8 +353,8 @@ def build(ctx: click.Context) -> None:
     subprocess.run(full_cmd, check=True, env=run_env)
 
     if lang == "rust":
-        src_path = Path("target/wasm32-wasip1/release") / f"{world}.wasm"
-        dst = Path(".") / f"{world}.wasm"
+        src_path = Path("target/wasm32-wasip1/release") / f"{resolved_world}.wasm"
+        dst = Path(".") / resolved_out
         if src_path.exists():
             shutil.move(str(src_path), str(dst))
             click.echo(f"Moved {src_path} to {dst}")
@@ -316,7 +362,16 @@ def build(ctx: click.Context) -> None:
             raise click.ClickException(f"WASM file '{src_path}' not found")
 
     if lang == "c":
-        full_cmd = f"wasm-tools component new {world}.wasm --adapt wasi_snapshot_preview1.wasm -o {world}.component.wasm".split()
+        full_cmd = [
+            "wasm-tools",
+            "component",
+            "new",
+            f"{resolved_world}.wasm",
+            "--adapt",
+            "wasi_snapshot_preview1.wasm",
+            "-o",
+            resolved_out,
+        ]
         click.echo(f"Running: {' '.join(full_cmd)}")
         subprocess.run(full_cmd, check=True)
 
