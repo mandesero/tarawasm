@@ -47,15 +47,11 @@ jobs:
           load: true
           tags: ${{ steps.vars.outputs.tags }}
 
-      - name: Install Wasmtime
-        run: |
-          curl https://wasmtime.dev/install.sh -sSf | bash
-          echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
-
       - name: Run pytest in docker mode
         env:
           TARAWASM_DOCKER_IMAGE: ${{ steps.vars.outputs.tags }}
           TARAWASM_DOCKER_PLATFORM: linux/amd64
+          TARAWASM_RUNTIME_MODE: docker
           WASM_RUNTIME: wasmtime
           PYTHONPATH: ${{ github.workspace }}
         run: |

@@ -26,4 +26,4 @@ test-docker-amd64:
 	@echo "==> Building test image for linux/amd64..."
 	@docker buildx build --platform linux/amd64 --load -t tarawasm:test-amd64 .
 	@echo "==> Running docker-mode pytest on linux/amd64..."
-	@TARAWASM_DOCKER_IMAGE=tarawasm:test-amd64 TARAWASM_DOCKER_PLATFORM=linux/amd64 WASM_RUNTIME=wasmtime PYTHONPATH=. python3 -m pytest -k "cli:docker" -vv
+	@TARAWASM_DOCKER_IMAGE=tarawasm:test-amd64 TARAWASM_DOCKER_PLATFORM=linux/amd64 TARAWASM_RUNTIME_MODE=docker WASM_RUNTIME=wasmtime PYTHONPATH=. python3 -m pytest -k "cli:docker" -vv

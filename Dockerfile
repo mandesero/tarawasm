@@ -60,6 +60,11 @@ RUN curl -L https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-3
 ENV WASI_SDK_PATH=/opt/wasi-sdk
 ENV PATH="${WASI_SDK_PATH}/bin:${PATH}"
 
+# Wasm runtime for in-container execution in tests
+RUN curl https://wasmtime.dev/install.sh -sSf | bash && \
+    mv /root/.wasmtime/bin/wasmtime /usr/local/bin/wasmtime && \
+    rm -rf /root/.wasmtime
+
 COPY . .
 
 ENV INSIDE_DOCKER=1
