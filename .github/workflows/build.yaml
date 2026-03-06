@@ -59,4 +59,5 @@ jobs:
       - name: Run non-docker pytest tests (python and standalone modes)
         env:
           WASM_RUNTIME: wasmtime
-        run: pytest -k "not cli:docker" -vv
+          PYTHONPATH: ${{ github.workspace }}
+        run: python3 -m pytest -k "not cli:docker" -vv
