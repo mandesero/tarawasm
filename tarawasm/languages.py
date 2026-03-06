@@ -6,10 +6,16 @@ from typing import List, Tuple
 from .config import LANG_CFGS, Config
 
 
-def bind_args(lang: str, conf: Config) -> Tuple[List[str], List[str]]:
+def bind_args(
+    lang: str,
+    conf: Config,
+    *,
+    world_override: str | None = None,
+    wit_override: Path | None = None,
+) -> Tuple[List[str], List[str]]:
     cfg = LANG_CFGS[lang]
-    wit_path = str(conf.wit_path)
-    world = conf.world
+    wit_path = str(wit_override or conf.wit_path)
+    world = world_override or conf.world
     wasm_file = conf.wasm_file
 
     if lang == "python":
@@ -33,11 +39,20 @@ def bind_args(lang: str, conf: Config) -> Tuple[List[str], List[str]]:
     return cmd, args
 
 
-def build_args(lang: str, conf: Config) -> Tuple[List[str], List[str]]:
+def build_args(
+    lang: str,
+    conf: Config,
+    *,
+    world_override: str | None = None,
+    wit_override: Path | None = None,
+    src_override: str | None = None,
+    out_override: str | None = None,
+) -> Tuple[List[str], List[str]]:
     cfg = LANG_CFGS[lang]
-    world = conf.world
-    src = conf.src_file
-    wit_path = str(conf.wit_path)
+    world = world_override or conf.world
+    src = src_override or conf.src_file
+    wit_path = str(wit_override or conf.wit_path)
+    out = out_override or f"{world}.wasm"
 
     if lang == "python":
         cmd = ["componentize-py"]
@@ -47,14 +62,14 @@ def build_args(lang: str, conf: Config) -> Tuple[List[str], List[str]]:
             "componentize",
             Path(src).stem,
             "-o",
-            f"{world}.wasm",
+            out,
         ]
     elif lang == "go":
         cmd = ["tinygo", "build"]
         args = [
             f"-target={cfg['tinygo-target']}",
             "-o",
-            f"{world}.wasm",
+            out,
             "--wit-package",
             wit_path,
             "--wit-world",
@@ -70,7 +85,7 @@ def build_args(lang: str, conf: Config) -> Tuple[List[str], List[str]]:
             "--world-name",
             world,
             "--out",
-            f"{world}.wasm",
+            out,
             "--disable",
             "all",
             "--enable",
