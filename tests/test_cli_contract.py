@@ -141,3 +141,27 @@ def test_build_clean_runs_clean_before_build(monkeypatch):
     assert result.exit_code == 0
     assert calls["clean"] == 1
     assert calls["build"] == 1
+
+
+def test_bind_rejects_common_option_in_tool_args():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["bind", "--", "--world", "late"])
+
+    assert result.exit_code != 0
+    assert "Common option '--world' must be provided before '--'." in result.output
+
+
+def test_build_rejects_common_option_in_tool_args():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["build", "--", "--out=late.wasm"])
+
+    assert result.exit_code != 0
+    assert "Common option '--out' must be provided before '--'." in result.output
+
+
+def test_bind_requires_separator_for_tool_specific_options():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["bind", "--tool-specific-flag", "42"])
+
+    assert result.exit_code != 0
+    assert "No such option: --tool-specific-flag" in result.output
