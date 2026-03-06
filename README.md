@@ -183,7 +183,13 @@ If you encounter missing dependencies, you can install them directly inside the 
 tarawasm pip install <your-package>
 ```
 
-This will run `pip install` **inside the Docker container**, making the package available for subsequent `tarawasm build` commands.
+By default, `tarawasm pip install ...` stores packages in `./.tarawasm/site-packages` (inside your mounted project directory), so they remain available across `--rm` container runs and for subsequent `tarawasm build` commands.
+
+You can override this location with:
+
+```bash
+TARAWASM_PY_SITE_PACKAGES=/work/.custom-python-site tarawasm pip install <your-package>
+```
 
 ---
 
