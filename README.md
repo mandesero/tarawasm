@@ -238,6 +238,8 @@ Language-specific options are passed separately after `--`:
 tarawasm bind --world <world> -- --tool-specific-flag value
 ```
 
+Common options (`--world`, `--wit`) must be specified before `--`.
+
 ### Building the WASM component
 
 ```bash
@@ -255,6 +257,8 @@ Language-specific options are passed separately after `--`:
 ```bash
 tarawasm build --out <output.wasm> -- --tool-specific-flag value
 ```
+
+Common options (`--world`, `--src`, `--wit`, `--out`, `--clean`) must be specified before `--`.
 
 ## Available Commands
 

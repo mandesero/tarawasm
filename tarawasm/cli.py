@@ -19,6 +19,19 @@ from tarawasm.config import (
 from tarawasm.languages import bind_args, build_args
 
 
+def _validate_common_options_not_in_tool_args(
+    tool_args: list[str], common_options: set[str]
+) -> None:
+    for token in tool_args:
+        if not token.startswith("-"):
+            continue
+        option = token.split("=", 1)[0]
+        if option in common_options:
+            raise click.ClickException(
+                f"Common option '{option}' must be provided before '--'."
+            )
+
+
 def _make_all_writable(path: str = "."):
     if os.getenv("INSIDE_DOCKER") != "1":
         return
@@ -200,9 +213,7 @@ def clean(ctx: click.Context) -> None:
             item.unlink()
 
 
-@cli.command(
-    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
-)
+@cli.command()
 @click.option(
     "--world",
     default=None,
@@ -220,17 +231,24 @@ def clean(ctx: click.Context) -> None:
     is_flag=True,
     help="Show help from the language-specific binding tool and exit",
 )
+@click.argument("tool_args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def bind(
     ctx: click.Context,
     world: str | None,
     wit_path: Path | None,
     tool_help: bool,
+    tool_args: tuple[str, ...],
 ) -> None:
     """Generate bindings from WIT.
 
     Language-specific options can be passed after '--'.
     """
+    _validate_common_options_not_in_tool_args(
+        list(tool_args),
+        {"--world", "--wit", "--tool-help"},
+    )
+
     try:
         conf = Config.load()
     except ConfigError as e:
@@ -248,15 +266,13 @@ def bind(
         subprocess.run(base_cmd + ["--help"], check=False)
         return
 
-    full_cmd = base_cmd + base_args + list(ctx.args)
+    full_cmd = base_cmd + base_args + list(tool_args)
     click.echo(f"Running: {' '.join(full_cmd)}")
     subprocess.run(full_cmd, check=True)
     _make_all_writable()
 
 
-@cli.command(
-    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
-)
+@cli.command()
 @click.option(
     "--world",
     default=None,
@@ -292,6 +308,7 @@ def bind(
     is_flag=True,
     help="Show help from the language-specific build tool and exit",
 )
+@click.argument("tool_args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def build(
     ctx: click.Context,
@@ -301,11 +318,17 @@ def build(
     out_file: str | None,
     run_clean: bool,
     tool_help: bool,
+    tool_args: tuple[str, ...],
 ) -> None:
     """Compile source to wasm component.
 
     Language-specific options can be passed after '--'.
     """
+    _validate_common_options_not_in_tool_args(
+        list(tool_args),
+        {"--world", "--src", "--wit", "--out", "--clean", "--tool-help"},
+    )
+
     try:
         conf = Config.load()
     except ConfigError as e:
@@ -336,7 +359,7 @@ def build(
         subprocess.run(base_cmd + ["--help"], check=False)
         return
 
-    full_cmd = base_cmd + base_args + list(ctx.args)
+    full_cmd = base_cmd + base_args + list(tool_args)
     click.echo(f"Running: {' '.join(full_cmd)}")
     run_env = os.environ.copy()
     if lang == "go" and "GOTOOLCHAIN" not in run_env:
