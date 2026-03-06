@@ -28,7 +28,7 @@ def test_bind_uses_common_overrides_and_passthrough(monkeypatch):
         captured["lang"] = lang
         captured["loaded"] = loaded
         captured["kwargs"] = kwargs
-        return ["bind-tool"], ["--base-bind"]
+        return ["bind-tool"], ["--base-bind", *kwargs["tool_args"]]
 
     monkeypatch.setattr("tarawasm.cli.bind_args", fake_bind_args)
     monkeypatch.setattr(
@@ -57,6 +57,7 @@ def test_bind_uses_common_overrides_and_passthrough(monkeypatch):
     assert captured["kwargs"] == {
         "world_override": "custom-world",
         "wit_override": Path("custom-wit"),
+        "tool_args": ["--lang-flag", "42"],
     }
     assert commands == [(["bind-tool", "--base-bind", "--lang-flag", "42"], True)]
 
@@ -72,7 +73,7 @@ def test_build_uses_common_overrides_and_passthrough(monkeypatch):
         captured["lang"] = lang
         captured["loaded"] = loaded
         captured["kwargs"] = kwargs
-        return ["build-tool"], ["--base-build"]
+        return ["build-tool"], ["--base-build", *kwargs["tool_args"]]
 
     monkeypatch.setattr("tarawasm.cli.build_args", fake_build_args)
     monkeypatch.setattr(
@@ -107,6 +108,7 @@ def test_build_uses_common_overrides_and_passthrough(monkeypatch):
         "wit_override": Path("custom-wit"),
         "src_override": "custom.py",
         "out_override": "custom.wasm",
+        "tool_args": ["--lang-flag", "42"],
     }
     assert commands[0][0] == ["build-tool", "--base-build", "--lang-flag", "42"]
     assert commands[0][1] is True
@@ -239,7 +241,7 @@ def test_bind_tool_help_uses_correct_tool_per_language(monkeypatch):
         "go": ["go", "tool", "wit-bindgen-go"],
         "js": ["jco", "guest-types"],
         "rust": ["cargo", "component", "bindings"],
-        "c": ["wit-bindgen", "c", "docs:adder@0.1.0.wasm"],
+        "c": ["wit-bindgen", "c"],
     }
 
     for lang, prefix in expected.items():
@@ -264,7 +266,7 @@ def test_build_tool_help_uses_correct_tool_per_language(monkeypatch):
         "go": ["tinygo", "build"],
         "js": ["jco", "componentize"],
         "rust": ["cargo", "component", "build"],
-        "c": ["clang", "component.c", "adder.c", "adder_component_type.o"],
+        "c": ["clang"],
     }
 
     for lang, prefix in expected.items():

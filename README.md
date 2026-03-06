@@ -272,6 +272,43 @@ Show language tool help:
 tarawasm build --tool-help
 ```
 
+### Language-specific options examples
+
+Python:
+
+```bash
+tarawasm bind -- --help
+tarawasm build -- --python-path .
+```
+
+Go:
+
+```bash
+tarawasm bind -- --versioned
+tarawasm build -- -opt=z
+```
+
+JavaScript:
+
+```bash
+tarawasm bind -- --quiet
+tarawasm build -- --world-name adder
+```
+
+Rust:
+
+```bash
+tarawasm bind -- --quiet
+tarawasm build -- --quiet
+```
+
+C:
+
+```bash
+tarawasm bind -- --rename-world adder
+tarawasm build -- -O0
+```
+
 ## Available Commands
 
 | Command          | Description                                 |
