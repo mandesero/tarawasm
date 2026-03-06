@@ -3,15 +3,16 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from tarawasm.cli import clean, cli
-from tarawasm.config import Config
+from tarawasm.config import LANG_CFGS, Config
 
 
 def _config(lang: str = "python") -> Config:
+    src = LANG_CFGS[lang]["default-src"]
     return Config(
         world="adder",
         lang=lang,
         wit_path=Path("wit"),
-        src_file="main.py",
+        src_file=src,
         wasm_file="docs:adder@0.1.0.wasm",
     )
 
@@ -165,3 +166,111 @@ def test_bind_requires_separator_for_tool_specific_options():
 
     assert result.exit_code != 0
     assert "No such option: --tool-specific-flag" in result.output
+
+
+def test_bind_tool_help_runs_tool_help_only(monkeypatch):
+    conf = _config()
+    commands = []
+
+    monkeypatch.setattr("tarawasm.cli.Config.load", lambda: conf)
+
+    def fake_bind_args(*_args, **_kwargs):
+        return ["bind-tool"], ["--base-bind"]
+
+    monkeypatch.setattr("tarawasm.cli.bind_args", fake_bind_args)
+    monkeypatch.setattr(
+        "tarawasm.cli.subprocess.run",
+        lambda cmd, **kwargs: commands.append((cmd, kwargs)),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["bind", "--tool-help", "--", "--lang-flag", "42"])
+
+    assert result.exit_code == 0
+    assert commands == [(["bind-tool", "--help"], {"check": False})]
+
+
+def test_build_tool_help_skips_clean_and_runs_help_only(monkeypatch):
+    conf = _config()
+    calls = {"clean": 0}
+    commands = []
+
+    monkeypatch.setattr("tarawasm.cli.Config.load", lambda: conf)
+
+    def fake_build_args(*_args, **_kwargs):
+        return ["build-tool"], ["--base-build"]
+
+    monkeypatch.setattr("tarawasm.cli.build_args", fake_build_args)
+    monkeypatch.setattr(
+        "tarawasm.cli.subprocess.run",
+        lambda cmd, **kwargs: commands.append((cmd, kwargs)),
+    )
+
+    original_clean_callback = clean.callback
+
+    def fake_clean_callback(*_args, **_kwargs):
+        calls["clean"] += 1
+
+    monkeypatch.setattr(clean, "callback", fake_clean_callback)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["build", "--clean", "--tool-help", "--", "--lang-flag", "42"],
+    )
+
+    monkeypatch.setattr(clean, "callback", original_clean_callback)
+
+    assert result.exit_code == 0
+    assert calls["clean"] == 0
+    assert commands == [(["build-tool", "--help"], {"check": False})]
+
+
+def test_bind_tool_help_uses_correct_tool_per_language(monkeypatch):
+    commands = []
+    monkeypatch.setattr(
+        "tarawasm.cli.subprocess.run",
+        lambda cmd, **kwargs: commands.append((cmd, kwargs)),
+    )
+    runner = CliRunner()
+
+    expected = {
+        "python": ["componentize-py"],
+        "go": ["go", "tool", "wit-bindgen-go"],
+        "js": ["jco", "guest-types"],
+        "rust": ["cargo", "component", "bindings"],
+        "c": ["wit-bindgen", "c", "docs:adder@0.1.0.wasm"],
+    }
+
+    for lang, prefix in expected.items():
+        monkeypatch.setattr("tarawasm.cli.Config.load", lambda lang=lang: _config(lang))
+        result = runner.invoke(cli, ["bind", "--tool-help"])
+        assert result.exit_code == 0
+        cmd, kwargs = commands.pop(0)
+        assert cmd == prefix + ["--help"]
+        assert kwargs == {"check": False}
+
+
+def test_build_tool_help_uses_correct_tool_per_language(monkeypatch):
+    commands = []
+    monkeypatch.setattr(
+        "tarawasm.cli.subprocess.run",
+        lambda cmd, **kwargs: commands.append((cmd, kwargs)),
+    )
+    runner = CliRunner()
+
+    expected = {
+        "python": ["componentize-py"],
+        "go": ["tinygo", "build"],
+        "js": ["jco", "componentize"],
+        "rust": ["cargo", "component", "build"],
+        "c": ["clang", "component.c", "adder.c", "adder_component_type.o"],
+    }
+
+    for lang, prefix in expected.items():
+        monkeypatch.setattr("tarawasm.cli.Config.load", lambda lang=lang: _config(lang))
+        result = runner.invoke(cli, ["build", "--tool-help"])
+        assert result.exit_code == 0
+        cmd, kwargs = commands.pop(0)
+        assert cmd == prefix + ["--help"]
+        assert kwargs == {"check": False}

@@ -340,9 +340,6 @@ def build(
         f"{resolved_world}.component.wasm" if lang == "c" else f"{resolved_world}.wasm"
     )
 
-    if run_clean:
-        ctx.invoke(clean)
-
     if lang not in LANG_CFGS:
         raise click.ClickException(f"Unsupported lang: {lang}")
 
@@ -358,6 +355,9 @@ def build(
     if tool_help:
         subprocess.run(base_cmd + ["--help"], check=False)
         return
+
+    if run_clean:
+        ctx.invoke(clean)
 
     full_cmd = base_cmd + base_args + list(tool_args)
     click.echo(f"Running: {' '.join(full_cmd)}")
