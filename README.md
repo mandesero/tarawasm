@@ -240,6 +240,12 @@ tarawasm bind --world <world> -- --tool-specific-flag value
 
 Common options (`--world`, `--wit`) must be specified before `--`.
 
+Show language tool help:
+
+```bash
+tarawasm bind --tool-help
+```
+
 ### Building the WASM component
 
 ```bash
@@ -259,6 +265,12 @@ tarawasm build --out <output.wasm> -- --tool-specific-flag value
 ```
 
 Common options (`--world`, `--src`, `--wit`, `--out`, `--clean`) must be specified before `--`.
+
+Show language tool help:
+
+```bash
+tarawasm build --tool-help
+```
 
 ## Available Commands
 
