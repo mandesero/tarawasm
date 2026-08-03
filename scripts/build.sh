@@ -6,10 +6,9 @@ set -euo pipefail
 nuitka \
     --onefile \
     --standalone \
-    --include-package=tarawasm.templates \
+    --include-package=tarawasm.backends \
     --output-dir=target \
     --output-filename=tarawasm \
-    --include-data-dir=tarawasm/templates=tarawasm/templates \
     --include-data-dir=tarawasm/lang_deps=tarawasm/lang_deps \
     tarawasm/cli.py
 

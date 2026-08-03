@@ -2,44 +2,20 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import tempfile
 from dataclasses import dataclass, field
-from importlib.resources import as_file, files, read_text
 from pathlib import Path
 from typing import Any
 
-import click
-
 CONFIG_FILE = "tarawasm.json"
-DEFAULT_STATE_DIR = ".tarawasm"
-DEFAULT_DIST_DIR = "dist"
+STATE_DIR = Path(".tarawasm")
+BUILD_DIR = STATE_DIR / "build"
+IMPORTED_WIT_DIR = STATE_DIR / "imported-wit"
+DEFAULT_DIST_DIR = Path("dist")
+SUPPORTED_LANGUAGES = ("python", "go", "js", "rust", "c")
 
-LANG_CFGS = {
-    "python": {"wit-flag": "--wit-path", "default-src": "main.py"},
-    "go": {
-        "wit-flag": "--wit-dir",
-        "tinygo-target": "wasip2",
-        "default-src": "main.go",
-    },
-    "js": {"wit-flag": "--wit", "default-src": "main.js"},
-    "rust": {
-        "default-src": "src/lib.rs",
-        "cargo-component": "cargo",
-        "release-target": "wasm32-wasip1",
-    },
-    "c": {"default-src": "component.c"},
-}
-
-_CONFIG_KEYS = {
-    "world",
-    "lang",
-    "wit_path",
-    "src_file",
-    "wasm_file",
-    "state_dir",
-    "dist_dir",
-}
+_CONFIG_KEYS = {"language", "world", "wit", "source", "output"}
+_WIT_KEYS = {"path", "package"}
 
 
 class ConfigError(Exception):
@@ -60,49 +36,52 @@ def discover_config(start: Path | str | None = None) -> Path:
             return config_path
     raise ConfigError(
         f"Config file '{CONFIG_FILE}' not found in '{candidate}' or its parents. "
-        "Run 'init' first."
+        "Run `tarawasm init` or `tarawasm import` first."
     )
 
 
-def _require_string(data: dict[str, Any], key: str) -> str:
+def _require_string(data: dict[str, Any], key: str, prefix: str = "") -> str:
     value = data.get(key)
+    field_name = f"{prefix}.{key}" if prefix else key
     if not isinstance(value, str) or not value.strip():
-        raise ConfigError(f"Config field '{key}' must be a non-empty string.")
+        raise ConfigError(f"Config field '{field_name}' must be a non-empty string.")
     return value
 
 
 def _relative_or_absolute(path: Path, root: Path) -> str:
+    resolved = path.resolve()
     try:
-        return path.resolve().relative_to(root.resolve()).as_posix()
+        return resolved.relative_to(root.resolve()).as_posix()
     except ValueError:
-        return str(path)
-
-
-def _validate_managed_directory(path: Path, root: Path, key: str) -> None:
-    try:
-        relative = path.resolve().relative_to(root.resolve())
-    except ValueError as exc:
-        raise ConfigError(
-            f"Config field '{key}' must stay inside the project root."
-        ) from exc
-    if relative == Path("."):
-        raise ConfigError(f"Config field '{key}' cannot be the project root.")
+        return str(resolved)
 
 
 @dataclass
 class Config:
+    language: str
     world: str
-    lang: str
     wit_path: Path
-    src_file: str
-    wasm_file: str
-    state_dir: Path = Path(DEFAULT_STATE_DIR)
-    dist_dir: Path = Path(DEFAULT_DIST_DIR)
+    wit_package: str
+    source: Path
+    output: Path
     config_path: Path | None = field(default=None, repr=False, compare=False)
 
     @property
     def project_root(self) -> Path:
         return self.config_path.parent if self.config_path else Path.cwd().resolve()
+
+    @property
+    def state_dir(self) -> Path:
+        return self.project_root / STATE_DIR
+
+    @property
+    def build_dir(self) -> Path:
+        return self.project_root / BUILD_DIR
+
+    @property
+    def lang(self) -> str:
+        """The configured backend name."""
+        return self.language
 
     def resolve_path(self, path: Path | str) -> Path:
         value = Path(path).expanduser()
@@ -131,62 +110,73 @@ class Config:
         if missing:
             raise ConfigError(f"Missing config field(s): {', '.join(missing)}.")
 
-        world = _require_string(data, "world")
-        lang = _require_string(data, "lang")
-        if lang not in LANG_CFGS:
+        language = _require_string(data, "language")
+        if language not in SUPPORTED_LANGUAGES:
             raise ConfigError(
-                f"Unsupported language '{lang}'; expected one of: "
-                f"{', '.join(LANG_CFGS)}."
+                f"Config field 'language' has unsupported value '{language}'; "
+                f"expected one of: {', '.join(SUPPORTED_LANGUAGES)}."
             )
-        root = config_path.parent
+        world = _require_string(data, "world")
+        source = _require_string(data, "source")
+        output = _require_string(data, "output")
 
-        def resolved(key: str, default: str | None = None) -> Path:
-            raw = data.get(key, default)
-            if not isinstance(raw, str) or not raw.strip():
-                raise ConfigError(f"Config field '{key}' must be a non-empty string.")
-            path = Path(raw).expanduser()
-            return path.resolve() if path.is_absolute() else (root / path).resolve()
-
-        state_dir = resolved("state_dir")
-        dist_dir = resolved("dist_dir")
-        _validate_managed_directory(state_dir, root, "state_dir")
-        _validate_managed_directory(dist_dir, root, "dist_dir")
-        if state_dir == dist_dir:
-            raise ConfigError("Config fields 'state_dir' and 'dist_dir' must differ.")
+        wit = data.get("wit")
+        if not isinstance(wit, dict):
+            raise ConfigError("Config field 'wit' must be an object.")
+        wit_unknown = sorted(set(wit) - _WIT_KEYS)
+        wit_missing = sorted(_WIT_KEYS - set(wit))
+        if wit_unknown:
+            raise ConfigError(
+                f"Unknown config field(s): {', '.join(f'wit.{x}' for x in wit_unknown)}."
+            )
+        if wit_missing:
+            raise ConfigError(
+                f"Missing config field(s): {', '.join(f'wit.{x}' for x in wit_missing)}."
+            )
+        wit_path = _require_string(wit, "path", "wit")
+        wit_package = _require_string(wit, "package", "wit")
 
         conf = cls(
+            language=language,
             world=world,
-            lang=lang,
-            wit_path=resolved("wit_path"),
-            src_file=str(resolved("src_file")),
-            wasm_file=str(resolved("wasm_file")),
-            state_dir=state_dir,
-            dist_dir=dist_dir,
+            wit_path=Path(wit_path),
+            wit_package=wit_package,
+            source=Path(source),
+            output=Path(output),
             config_path=config_path,
         )
+        # Resolve here to make malformed path values fail close to their fields.
+        for key, value in (
+            ("wit.path", conf.wit_path),
+            ("source", conf.source),
+            ("output", conf.output),
+        ):
+            try:
+                conf.resolve_path(value)
+            except (OSError, RuntimeError, ValueError) as exc:
+                raise ConfigError(
+                    f"Config field '{key}' has an invalid path: {exc}."
+                ) from exc
         return conf
 
     def save(self, path: Path | str | None = None) -> None:
+        if self.language not in SUPPORTED_LANGUAGES:
+            raise ConfigError(f"Unsupported language '{self.language}'.")
         config_path = Path(path) if path is not None else self.config_path
         if config_path is None:
             config_path = Path.cwd() / CONFIG_FILE
         if not config_path.is_absolute():
             config_path = (Path.cwd() / config_path).resolve()
         root = config_path.parent
-        resolved_state_dir = self.resolve_path(self.state_dir)
-        resolved_dist_dir = self.resolve_path(self.dist_dir)
-        _validate_managed_directory(resolved_state_dir, root, "state_dir")
-        _validate_managed_directory(resolved_dist_dir, root, "dist_dir")
-        if resolved_state_dir == resolved_dist_dir:
-            raise ConfigError("Config fields 'state_dir' and 'dist_dir' must differ.")
         data = {
+            "language": self.language,
             "world": self.world,
-            "lang": self.lang,
-            "wit_path": _relative_or_absolute(self.resolve_path(self.wit_path), root),
-            "src_file": _relative_or_absolute(self.resolve_path(self.src_file), root),
-            "wasm_file": _relative_or_absolute(self.resolve_path(self.wasm_file), root),
-            "state_dir": _relative_or_absolute(resolved_state_dir, root),
-            "dist_dir": _relative_or_absolute(resolved_dist_dir, root),
+            "wit": {
+                "path": _relative_or_absolute(self.resolve_path(self.wit_path), root),
+                "package": self.wit_package,
+            },
+            "source": _relative_or_absolute(self.resolve_path(self.source), root),
+            "output": _relative_or_absolute(self.resolve_path(self.output), root),
         }
         root.mkdir(parents=True, exist_ok=True)
         fd, temporary_name = tempfile.mkstemp(
@@ -201,22 +191,3 @@ class Config:
             Path(temporary_name).unlink(missing_ok=True)
             raise
         self.config_path = config_path
-
-
-def load_template(lang: str) -> str:
-    return read_text("tarawasm.templates", f"{lang}.tpl")
-
-
-def copy_runtime_wasm(destination: Path | str = "wasi_snapshot_preview1.wasm") -> Path:
-    dst_wasm = Path(destination)
-    dst_wasm.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        wasm_resource = files("tarawasm.lang_deps") / "wasi_snapshot_preview1.wasm"
-        with as_file(wasm_resource) as src_wasm:
-            shutil.copyfile(src_wasm, dst_wasm)
-        click.echo(f"Copied runtime WASM to {dst_wasm}")
-        return dst_wasm
-    except FileNotFoundError as exc:
-        raise click.ClickException(
-            "Runtime file 'wasi_snapshot_preview1.wasm' not found in package."
-        ) from exc

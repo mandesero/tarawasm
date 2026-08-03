@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -11,17 +13,15 @@ from pathlib import Path
 import click
 
 from tarawasm.artifacts import ArtifactManifest
+from tarawasm.backends import BackendError, backend_names, get_backend
+from tarawasm.backends.base import Command
 from tarawasm.config import (
     CONFIG_FILE,
-    DEFAULT_DIST_DIR,
-    DEFAULT_STATE_DIR,
-    LANG_CFGS,
+    IMPORTED_WIT_DIR,
     Config,
     ConfigError,
-    copy_runtime_wasm,
-    load_template,
 )
-from tarawasm.languages import bind_args, build_args
+from tarawasm.wit import WitError, WitParser
 
 
 @contextmanager
@@ -34,380 +34,533 @@ def _project_directory(conf: Config):
         os.chdir(previous)
 
 
-def _validate_common_options_not_in_tool_args(
-    tool_args: list[str], common_options: set[str]
-) -> None:
+def _fail(error: Exception) -> click.ClickException:
+    return click.ClickException(str(error))
+
+
+def _run(command: Command, *, dry_run: bool = False, check: bool = True) -> None:
+    click.echo(f"Running: {shlex.join(command.argv)}")
+    if dry_run:
+        return
+    environment = os.environ.copy()
+    environment.update(command.env)
+    try:
+        subprocess.run(command.argv, check=check, env=environment)
+    except FileNotFoundError as exc:
+        raise click.ClickException(
+            f"Required tool '{command.argv[0]}' was not found."
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        raise click.ClickException(
+            f"Command failed with exit code {exc.returncode}: {shlex.join(command.argv)}"
+        ) from exc
+
+
+def _validate_tool_args(tool_args: list[str], common_options: set[str]) -> None:
     for token in tool_args:
-        if not token.startswith("-"):
-            continue
         option = token.split("=", 1)[0]
-        if option in common_options:
+        if token.startswith("-") and option in common_options:
             raise click.ClickException(
                 f"Common option '{option}' must be provided before '--'."
             )
 
 
+def _parse_selected_world(wit: Path, world: str):
+    try:
+        return WitParser().parse(wit).select_world(world)
+    except WitError as exc:
+        raise _fail(exc)
+
+
+def _relative_or_absolute(path: Path, root: Path) -> str:
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return str(path.resolve())
+
+
+def _config_bytes(conf: Config, root: Path) -> bytes:
+    data = {
+        "language": conf.language,
+        "world": conf.world,
+        "wit": {
+            "path": _relative_or_absolute(conf.resolve_path(conf.wit_path), root),
+            "package": conf.wit_package,
+        },
+        "source": _relative_or_absolute(conf.resolve_path(conf.source), root),
+        "output": _relative_or_absolute(conf.resolve_path(conf.output), root),
+    }
+    return (json.dumps(data, indent=2) + "\n").encode()
+
+
+def _install_project_files(
+    root: Path,
+    files: dict[Path, str | bytes],
+    *,
+    force: bool,
+    sources: set[Path],
+) -> None:
+    conflicts = sorted(path for path in files if (root / path).exists())
+    protected_source = any(source in conflicts for source in sources)
+    if conflicts and (not force or protected_source):
+        rendered = ", ".join(path.as_posix() for path in conflicts)
+        suffix = (
+            " Existing source files are never overwritten."
+            if protected_source
+            else " Use --force to replace known generated project files."
+        )
+        raise click.ClickException(f"Project file conflict(s): {rendered}.{suffix}")
+
+    root.parent.mkdir(parents=True, exist_ok=True)
+    staging_parent = root if root.exists() else root.parent
+    with tempfile.TemporaryDirectory(
+        prefix=".tarawasm-init-", dir=staging_parent
+    ) as temporary:
+        staging = Path(temporary) / "new"
+        backup = Path(temporary) / "backup"
+        for relative, content in files.items():
+            destination = staging / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if isinstance(content, bytes):
+                destination.write_bytes(content)
+            else:
+                destination.write_text(content)
+        if not root.exists():
+            os.replace(staging, root)
+            return
+        installed: list[Path] = []
+        backed_up: list[Path] = []
+        try:
+            for relative in files:
+                destination = root / relative
+                if destination.exists():
+                    saved = backup / relative
+                    saved.parent.mkdir(parents=True, exist_ok=True)
+                    os.replace(destination, saved)
+                    backed_up.append(relative)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(staging / relative, destination)
+                installed.append(relative)
+        except Exception:
+            for relative in reversed(installed):
+                (root / relative).unlink(missing_ok=True)
+            for relative in reversed(backed_up):
+                destination = root / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(backup / relative, destination)
+            raise
+
+
 @click.group()
 def cli() -> None:
-    """tarawasm: CLI for building WebAssembly components"""
+    """Build WebAssembly components from WIT contracts."""
 
 
 @cli.command()
-@click.argument("world")
 @click.option(
-    "--lang",
-    "-l",
+    "--lang", "language", "-l", required=True, type=click.Choice(backend_names())
+)
+@click.option(
+    "--wit",
+    "wit_path",
     required=True,
-    type=click.Choice(list(LANG_CFGS.keys())),
-    help="Guest language to use",
+    type=click.Path(path_type=Path, exists=True),
+    help="WIT file or package directory.",
 )
+@click.option("--world", help="World to implement; inferred when WIT has one world.")
+@click.option("--force", is_flag=True, help="Replace known generated project files.")
 @click.option(
-    "--wasm-file", "-w", required=True, help="Path to the .wasm file for init step"
+    "--dry-run", is_flag=True, help="Validate and show files without writing."
 )
-@click.option(
-    "--wit-dir",
-    default="./wit",
-    help="Directory to write WIT definitions (default: ./wit)",
-)
-@click.option(
-    "--src-file",
-    "-s",
-    default=None,
-    help="Source file to compile (default per language)",
-)
+@click.argument("project_dir", type=click.Path(path_type=Path), default=Path("."))
 def init(
-    world: str,
-    lang: str,
-    wasm_file: str,
-    wit_dir: str,
-    src_file: str | None,
+    language: str,
+    wit_path: Path,
+    world: str | None,
+    force: bool,
+    dry_run: bool,
+    project_dir: Path,
 ) -> None:
-    """Initialize project and save configuration"""
-    # Validate language
-    cfg = LANG_CFGS[lang]
-    default_src = cfg.get("default-src")
-    src = src_file or default_src
-    if src is None:
-        raise click.ClickException("No source file specified and no default available")
-    # Extract WIT if needed
-    project_root = Path.cwd().resolve()
-    wasm_path = Path(wasm_file).resolve()
-    if not wasm_path.exists():
-        raise click.ClickException(f"WASM file '{wasm_file}' not found")
+    """Create a project directly from a WIT contract."""
+    try:
+        document = WitParser().parse(wit_path)
+        selected = document.select_world(world)
+        backend = get_backend(language)
+    except (WitError, BackendError) as exc:
+        raise _fail(exc)
 
-    if lang == "rust":
-        with tempfile.TemporaryDirectory(prefix=".tarawasm-init-") as temporary:
-            staged_project = Path(temporary) / world
-            subprocess.run(
-                ["cargo", "component", "new", "--lib", str(staged_project)],
-                check=True,
-            )
-            conflicts = sorted(
-                item.name
-                for item in staged_project.iterdir()
-                if (project_root / item.name).exists()
-            )
-            if conflicts:
-                raise click.ClickException(
-                    "Rust project initialization would overwrite existing path(s): "
-                    f"{', '.join(conflicts)}."
-                )
-            for item in staged_project.iterdir():
-                shutil.move(str(item), project_root / item.name)
-        wit_output = Path(wit_dir)
-        wit_output.mkdir(parents=True, exist_ok=True)
-        out_wit = wit_output / "world.wit"
-    else:
-        wit_output = Path(wit_dir)
-        wit_output.mkdir(parents=True, exist_ok=True)
-        out_wit = wit_output / f"{world}.wit"
-
-    if lang == "c":
-        copy_runtime_wasm()
-
-    if lang == "go" and not Path("go.mod").exists():
-        click.echo("Initializing Go module...")
-        subprocess.run(["go", "mod", "init", f"{world}-wasm-bindings"], check=True)
-        subprocess.run(
-            [
-                "go",
-                "get",
-                "-tool",
-                "go.bytecodealliance.org/cmd/wit-bindgen-go@v0.7.0",
-            ],
-            check=True,
-        )
-        subprocess.run(["go", "get", "go.bytecodealliance.org@v0.7.0"], check=True)
-
-    click.echo(f"Extracting WIT from '{wasm_file}' to '{out_wit}'...")
-    with open(out_wit, "w") as f:
-        subprocess.run(
-            ["wasm-tools", "component", "wit", str(wasm_path)], check=True, stdout=f
-        )
-
-    tpl = load_template(lang)
-    content = tpl.replace("${world}", world)
-
-    out = Path(src)
-    if not out.exists() or lang == "rust":
-        out.write_text(content)
-
-    # Save config
+    root = project_dir.expanduser().resolve()
+    source = backend.default_source
+    output = Path("dist") / f"{selected.name}.wasm"
     conf = Config(
-        world,
-        lang,
-        wit_output,
-        src,
-        wasm_file,
-        state_dir=Path(DEFAULT_STATE_DIR),
-        dist_dir=Path(DEFAULT_DIST_DIR),
-        config_path=project_root / CONFIG_FILE,
+        language=language,
+        world=selected.name,
+        wit_path=wit_path.resolve(),
+        wit_package=selected.package,
+        source=source,
+        output=output,
+        config_path=root / CONFIG_FILE,
     )
-    conf.save()
-    click.echo("Configuration saved to 'tarawasm.json'")
+    try:
+        files = backend.initialize_files(selected, wit_path.resolve(), root)
+    except (BackendError, OSError) as exc:
+        raise _fail(exc)
+    files[Path(CONFIG_FILE)] = _config_bytes(conf, root)
+    click.echo(
+        f"Project: {root}\nLanguage: {language}\n"
+        f"WIT package: {selected.package}\nWorld: {selected.name}"
+    )
+    for relative in sorted(files):
+        click.echo(f"  create {relative.as_posix()}")
+    if dry_run:
+        click.echo("Dry run: no files were created.")
+        return
+    source_paths = {
+        path
+        for path in files
+        if path.suffix in {".py", ".go", ".js", ".rs", ".c", ".cc", ".cpp"}
+    }
+    _install_project_files(root, files, force=force, sources=source_paths)
+    click.echo(f"Configuration saved to '{root / CONFIG_FILE}'.")
+
+
+@cli.command(name="import")
+@click.option(
+    "--lang", "language", "-l", required=True, type=click.Choice(backend_names())
+)
+@click.option(
+    "--component",
+    required=True,
+    type=click.Path(path_type=Path, exists=True, dir_okay=False),
+    help="Existing WebAssembly component to import.",
+)
+@click.option(
+    "--world", help="World to implement; inferred when the component has one."
+)
+@click.option("--force", is_flag=True, help="Replace known generated project files.")
+@click.option(
+    "--dry-run", is_flag=True, help="Validate and show files without writing."
+)
+@click.argument("project_dir", type=click.Path(path_type=Path), default=Path("."))
+def import_component(
+    language: str,
+    component: Path,
+    world: str | None,
+    force: bool,
+    dry_run: bool,
+    project_dir: Path,
+) -> None:
+    """Create a project by importing an existing WebAssembly component."""
+    root = project_dir.expanduser().resolve()
+    with tempfile.TemporaryDirectory(prefix="tarawasm-import-") as temporary:
+        extracted = Path(temporary) / "wit"
+        try:
+            result = subprocess.run(
+                (
+                    "wasm-tools",
+                    "component",
+                    "wit",
+                    str(component.resolve()),
+                    "--out-dir",
+                    str(extracted),
+                ),
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError as exc:
+            raise click.ClickException(
+                "Required tool 'wasm-tools' was not found."
+            ) from exc
+        if result.returncode != 0:
+            reason = result.stderr.strip() or result.stdout.strip() or "unknown error"
+            raise click.ClickException(
+                f"'{component}' is not a WebAssembly Component Model binary: {reason}"
+            )
+        try:
+            document = WitParser().parse(extracted)
+            selected = document.select_world(world)
+            backend = get_backend(language)
+        except (WitError, BackendError) as exc:
+            raise _fail(exc)
+
+        final_wit = root / IMPORTED_WIT_DIR
+        conf = Config(
+            language=language,
+            world=selected.name,
+            wit_path=final_wit,
+            wit_package=selected.package,
+            source=backend.default_source,
+            output=Path("dist") / f"{selected.name}.wasm",
+            config_path=root / CONFIG_FILE,
+        )
+        try:
+            files = backend.initialize_files(selected, final_wit, root)
+        except (BackendError, OSError) as exc:
+            raise _fail(exc)
+        for source_file in extracted.rglob("*"):
+            if source_file.is_file():
+                relative = source_file.relative_to(extracted)
+                if relative.parent == Path("deps") and relative.suffix == ".wit":
+                    relative = relative.parent / relative.stem / "package.wit"
+                files[IMPORTED_WIT_DIR / relative] = source_file.read_bytes()
+        files[Path(CONFIG_FILE)] = _config_bytes(conf, root)
+
+        click.echo(
+            f"Project: {root}\nLanguage: {language}\n"
+            f"Imported component: {component.resolve()}\n"
+            f"WIT package: {selected.package}\nWorld: {selected.name}"
+        )
+        for relative in sorted(files):
+            click.echo(f"  create {relative.as_posix()}")
+        if dry_run:
+            click.echo("Dry run: no files were created.")
+            return
+        source_paths = {
+            path
+            for path in files
+            if path.suffix in {".py", ".go", ".js", ".rs", ".c", ".cc", ".cpp"}
+            and IMPORTED_WIT_DIR not in path.parents
+        }
+        _install_project_files(root, files, force=force, sources=source_paths)
+    click.echo(f"Configuration saved to '{root / CONFIG_FILE}'.")
 
 
 @cli.command()
-@click.pass_context
-def clean(ctx: click.Context) -> None:
+def clean() -> None:
     """Remove only artifacts tracked by tarawasm."""
     try:
         conf = Config.load()
-    except ConfigError as e:
-        raise click.ClickException(str(e))
-
-    manifest = ArtifactManifest(conf.project_root, conf.resolve_path(conf.state_dir))
-    removed = manifest.clean()
+    except ConfigError as exc:
+        raise _fail(exc)
+    removed = ArtifactManifest(conf.project_root, conf.state_dir).clean()
     click.echo(
         f"Removed {len(removed)} tracked artifact(s) for "
-        f"{conf.lang} world '{conf.world}'."
+        f"{conf.language} world '{conf.world}'."
     )
 
 
+@cli.group()
+def deps() -> None:
+    """Manage reproducible WIT dependencies with wkg."""
+
+
+def _dependency_paths(conf: Config) -> tuple[Path, Path, Path]:
+    wit = conf.resolve_path(conf.wit_path)
+    wit_dir = wit if wit.is_dir() else wit.parent
+    return wit_dir, wit_dir / "wkg.lock", conf.state_dir / "deps/cache"
+
+
+def _run_dependency_command(action: str, *, dry_run: bool) -> None:
+    try:
+        conf = Config.load()
+    except ConfigError as exc:
+        raise _fail(exc)
+    wit_dir, lock, cache = _dependency_paths(conf)
+    command = Command(
+        (
+            "wkg",
+            "wit",
+            action,
+            "--wit-dir",
+            str(wit_dir),
+            "--cache",
+            str(cache),
+        )
+    )
+    if dry_run:
+        _run(command, dry_run=True)
+        return
+    cache.mkdir(parents=True, exist_ok=True)
+    previous_lock = lock.read_bytes() if lock.is_file() else None
+    _run(command)
+    if action == "fetch" and previous_lock is not None:
+        current_lock = lock.read_bytes() if lock.is_file() else None
+        if current_lock != previous_lock:
+            lock.write_bytes(previous_lock)
+            raise click.ClickException(
+                "WIT dependencies differ from wkg.lock. "
+                "Run `tarawasm deps update` to update them explicitly."
+            )
+
+
+@deps.command(name="resolve")
+@click.option("--dry-run", is_flag=True)
+def deps_resolve(dry_run: bool) -> None:
+    """Fetch dependencies pinned by wkg.lock, or create the initial lock."""
+    _run_dependency_command("fetch", dry_run=dry_run)
+
+
+@deps.command(name="update")
+@click.option("--dry-run", is_flag=True)
+def deps_update(dry_run: bool) -> None:
+    """Explicitly update dependencies and wkg.lock."""
+    _run_dependency_command("update", dry_run=dry_run)
+
+
+@deps.command(name="list")
+def deps_list() -> None:
+    """List packages pinned in wkg.lock."""
+    try:
+        conf = Config.load()
+    except ConfigError as exc:
+        raise _fail(exc)
+    _, lock, _ = _dependency_paths(conf)
+    if not lock.is_file():
+        raise click.ClickException(
+            f"Dependency lock '{lock}' does not exist. Run `tarawasm deps resolve`."
+        )
+    text = lock.read_text()
+    packages = re.findall(r'name\s*=\s*"([^"]+)"[\s\S]*?version\s*=\s*"([^"]+)"', text)
+    if not packages:
+        click.echo("No locked WIT dependencies.")
+        return
+    for name, version in packages:
+        click.echo(f"{name}@{version}")
+
+
 @cli.command()
-@click.option(
-    "--world",
-    default=None,
-    help="Override world name from tarawasm.json for this run",
-)
-@click.option(
-    "--wit",
-    "wit_path",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Override WIT path from tarawasm.json for this run",
-)
-@click.option(
-    "--tool-help",
-    is_flag=True,
-    help="Show help from the language-specific binding tool and exit",
-)
+@click.option("--world", help="Override the configured world for this run.")
+@click.option("--wit", "wit_path", type=click.Path(path_type=Path))
+@click.option("--tool-help", is_flag=True)
+@click.option("--dry-run", is_flag=True)
 @click.argument("tool_args", nargs=-1, type=click.UNPROCESSED)
-@click.pass_context
 def bind(
-    ctx: click.Context,
     world: str | None,
     wit_path: Path | None,
     tool_help: bool,
+    dry_run: bool,
     tool_args: tuple[str, ...],
 ) -> None:
-    """Generate bindings from WIT.
-
-    Language-specific options can be passed after '--'.
-    """
-    _validate_common_options_not_in_tool_args(
-        list(tool_args),
-        {"--world", "--wit", "--tool-help"},
+    """Generate language bindings from WIT."""
+    _validate_tool_args(
+        list(tool_args), {"--world", "--wit", "--tool-help", "--dry-run"}
     )
-
     try:
         conf = Config.load()
-    except ConfigError as e:
-        raise click.ClickException(str(e))
-
+        backend = get_backend(conf.language)
+    except (ConfigError, BackendError) as exc:
+        raise _fail(exc)
+    resolved_world = world or conf.world
+    resolved_wit = conf.resolve_path(wit_path or conf.wit_path)
+    _parse_selected_world(resolved_wit, resolved_world)
+    commands = backend.bind_commands(
+        conf,
+        world=resolved_world,
+        wit=resolved_wit,
+        tool_args=list(tool_args),
+    )
+    if tool_help:
+        command = commands[-1]
+        _run(Command((*command.argv, "--help"), command.env), check=False)
+        return
     with _project_directory(conf):
-        lang = conf.lang
-        base_cmd, base_args = bind_args(
-            lang,
-            conf,
-            world_override=world,
-            wit_override=wit_path,
-            tool_args=list(tool_args),
-        )
-
-        if tool_help:
-            subprocess.run(base_cmd + ["--help"], check=False)
-            return
-
-        manifest = ArtifactManifest(
-            conf.project_root, conf.resolve_path(conf.state_dir)
-        )
+        manifest = ArtifactManifest(conf.project_root, conf.state_dir)
         before = manifest.snapshot()
-        full_cmd = base_cmd + base_args
-        click.echo(f"Running: {' '.join(full_cmd)}")
         try:
-            subprocess.run(full_cmd, check=True)
+            for command in commands:
+                _run(command, dry_run=dry_run)
         finally:
-            manifest.record_created_since(before)
+            if not dry_run:
+                manifest.record_created_since(before)
 
 
 @cli.command()
-@click.option(
-    "--world",
-    default=None,
-    help="Override world name from tarawasm.json for this run",
-)
-@click.option(
-    "--src",
-    "src_file",
-    default=None,
-    help="Override source file from tarawasm.json for this run",
-)
-@click.option(
-    "--wit",
-    "wit_path",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Override WIT path from tarawasm.json for this run",
-)
-@click.option(
-    "--out",
-    "out_file",
-    default=None,
-    help="Output WASM file (for C this is the final component output)",
-)
-@click.option(
-    "--clean",
-    "run_clean",
-    is_flag=True,
-    help="Run clean before build",
-)
-@click.option(
-    "--tool-help",
-    is_flag=True,
-    help="Show help from the language-specific build tool and exit",
-)
+@click.option("--world", help="Override the configured world for this run.")
+@click.option("--wit", "wit_path", type=click.Path(path_type=Path))
+@click.option("--src", "source", type=click.Path(path_type=Path))
+@click.option("--out", "output", type=click.Path(path_type=Path))
+@click.option("--clean", "run_clean", is_flag=True)
+@click.option("--tool-help", is_flag=True)
+@click.option("--dry-run", is_flag=True)
 @click.argument("tool_args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def build(
     ctx: click.Context,
     world: str | None,
-    src_file: str | None,
     wit_path: Path | None,
-    out_file: str | None,
+    source: Path | None,
+    output: Path | None,
     run_clean: bool,
     tool_help: bool,
+    dry_run: bool,
     tool_args: tuple[str, ...],
 ) -> None:
-    """Compile source to wasm component.
-
-    Language-specific options can be passed after '--'.
-    """
-    _validate_common_options_not_in_tool_args(
+    """Build and atomically publish a verified WebAssembly component."""
+    _validate_tool_args(
         list(tool_args),
-        {"--world", "--src", "--wit", "--out", "--clean", "--tool-help"},
+        {"--world", "--wit", "--src", "--out", "--clean", "--tool-help", "--dry-run"},
     )
-
     try:
         conf = Config.load()
-    except ConfigError as e:
-        raise click.ClickException(str(e))
-
+        backend = get_backend(conf.language)
+    except (ConfigError, BackendError) as exc:
+        raise _fail(exc)
+    resolved_world = world or conf.world
+    resolved_wit = conf.resolve_path(wit_path or conf.wit_path)
+    resolved_source = conf.resolve_path(source or conf.source)
+    resolved_output = conf.resolve_path(output or conf.output)
+    selected_world = _parse_selected_world(resolved_wit, resolved_world)
+    try:
+        backend.validate_world(selected_world)
+    except BackendError as exc:
+        raise _fail(exc)
+    temporary_output = conf.build_dir / "publish" / f"{resolved_world}.wasm"
+    command = backend.build_command(
+        conf,
+        world=resolved_world,
+        wit=resolved_wit,
+        source=resolved_source,
+        output=temporary_output,
+        tool_args=list(tool_args),
+    )
+    if tool_help:
+        _run(Command((*command.argv, "--help"), command.env), check=False)
+        return
+    if run_clean and not dry_run:
+        ctx.invoke(clean)
     with _project_directory(conf):
-        lang = conf.lang
-        resolved_world = world or conf.world
-        output_name = (
-            f"{resolved_world}.component.wasm"
-            if lang == "c"
-            else f"{resolved_world}.wasm"
-        )
-        resolved_out = out_file or str(conf.resolve_path(conf.dist_dir) / output_name)
-
-        if lang not in LANG_CFGS:
-            raise click.ClickException(f"Unsupported lang: {lang}")
-
-        base_cmd, base_args = build_args(
-            lang,
-            conf,
-            world_override=resolved_world,
-            wit_override=wit_path,
-            src_override=src_file,
-            out_override=resolved_out,
-            tool_args=list(tool_args),
-        )
-
-        if tool_help:
-            subprocess.run(base_cmd + ["--help"], check=False)
-            return
-
-        if run_clean:
-            ctx.invoke(clean)
-
-        manifest = ArtifactManifest(
-            conf.project_root, conf.resolve_path(conf.state_dir)
-        )
+        manifest = ArtifactManifest(conf.project_root, conf.state_dir)
         before = manifest.snapshot()
-        Path(resolved_out).parent.mkdir(parents=True, exist_ok=True)
-        if lang == "c":
-            (conf.resolve_path(conf.state_dir) / "build" / "c").mkdir(
-                parents=True, exist_ok=True
+        if dry_run:
+            _run(command, dry_run=True)
+            finish = backend.finish_build_command(
+                conf, world=resolved_world, output=temporary_output
             )
-        full_cmd = base_cmd + base_args
-        click.echo(f"Running: {' '.join(full_cmd)}")
-        run_env = os.environ.copy()
-        if lang == "go" and "GOTOOLCHAIN" not in run_env:
-            try:
-                go_version = subprocess.check_output(["go", "version"], text=True)
-            except (FileNotFoundError, subprocess.CalledProcessError):
-                go_version = ""
-            match = re.search(r"\bgo1\.(\d+)", go_version)
-            if match and int(match.group(1)) >= 26:
-                # TinyGo 0.40.x requires the Go 1.25 toolchain for guest builds.
-                run_env["GOTOOLCHAIN"] = "go1.25.4+auto"
-                click.echo(
-                    "Detected Go 1.26+, using GOTOOLCHAIN=go1.25.4+auto for TinyGo."
-                )
-        if lang == "rust":
-            run_env["CARGO_TARGET_DIR"] = str(
-                conf.resolve_path(conf.state_dir) / "build" / "rust"
-            )
-
+            if finish:
+                _run(finish, dry_run=True)
+            click.echo(f"Would publish verified component to {resolved_output}")
+            return
+        temporary_output.parent.mkdir(parents=True, exist_ok=True)
+        temporary_output.unlink(missing_ok=True)
         try:
-            subprocess.run(full_cmd, check=True, env=run_env)
-
-            if lang == "rust":
-                src_path = (
-                    Path(run_env["CARGO_TARGET_DIR"])
-                    / "wasm32-wasip1"
-                    / "release"
-                    / f"{resolved_world}.wasm"
+            _run(command)
+            finish = backend.finish_build_command(
+                conf, world=resolved_world, output=temporary_output
+            )
+            if finish:
+                _run(finish)
+            built = backend.locate_artifact(conf, temporary_output)
+            if built != temporary_output:
+                if not built.is_file():
+                    raise click.ClickException(
+                        f"Build artifact '{built}' was not created."
+                    )
+                shutil.copyfile(built, temporary_output)
+            if not temporary_output.is_file():
+                raise click.ClickException(
+                    f"Build did not create expected artifact '{temporary_output}'."
                 )
-                dst = Path(resolved_out)
-                if src_path.exists():
-                    shutil.move(str(src_path), str(dst))
-                    click.echo(f"Moved {src_path} to {dst}")
-                else:
-                    raise click.ClickException(f"WASM file '{src_path}' not found")
-
-            if lang == "c":
-                intermediate = (
-                    conf.resolve_path(conf.state_dir)
-                    / "build"
-                    / "c"
-                    / f"{resolved_world}.wasm"
-                )
-                full_cmd = [
-                    "wasm-tools",
-                    "component",
-                    "new",
-                    str(intermediate),
-                    "--adapt",
-                    str(conf.project_root / "wasi_snapshot_preview1.wasm"),
-                    "-o",
-                    resolved_out,
-                ]
-                click.echo(f"Running: {' '.join(full_cmd)}")
-                subprocess.run(full_cmd, check=True)
+            try:
+                WitParser().parse(temporary_output)
+            except WitError as exc:
+                raise click.ClickException(
+                    f"Build output is not a valid WebAssembly component: {exc}"
+                ) from exc
+            resolved_output.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(temporary_output, resolved_output)
+            manifest.record(resolved_output)
+            click.echo(f"Built {resolved_output}")
         finally:
             manifest.record_created_since(before)
 
@@ -426,23 +579,18 @@ def strip(ctx: click.Context, wasm: str) -> None:
         if not output_flag_present
         else []
     )
-
-    cmd = ["wasm-tools", "strip", wasm] + default_output + ctx.args
-    click.echo(f"Running: {' '.join(cmd)}")
-    subprocess.run(cmd, check=True)
+    _run(Command(("wasm-tools", "strip", wasm, *default_output, *ctx.args)))
 
 
-@cli.command()
+@cli.command(name="all")
 @click.pass_context
-def all(ctx: click.Context) -> None:
-    """Run clean, bind, build, pack"""
+def all_commands(ctx: click.Context) -> None:
+    """Run clean, bind, and build."""
     ctx.invoke(clean)
     ctx.invoke(bind)
     ctx.invoke(build)
     conf = Config.load()
-    suffix = ".component.wasm" if conf.lang == "c" else ".wasm"
-    output = conf.resolve_path(conf.dist_dir) / f"{conf.world}{suffix}"
-    click.echo(f"{output} is ready")
+    click.echo(f"{conf.resolve_path(conf.output)} is ready")
 
 
 if __name__ == "__main__":

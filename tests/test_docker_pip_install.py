@@ -21,7 +21,7 @@ def _create_local_python_package(work_dir: Path) -> Path:
         ")\n"
     )
     (pkg_module / "__init__.py").write_text(
-        "def banner() -> str:\n" "    return 'helper-ok'\n"
+        "def banner() -> str:\n    return 'helper-ok'\n"
     )
     return pkg_root
 
@@ -43,12 +43,14 @@ def test_docker_pip_install_unblocks_python_build(tmp_path, mode):
 
     run_cli(
         work_dir,
-        "init",
+        "import",
         "--lang",
         "python",
-        "--wasm-file",
+        "--component",
         "docs:adder@0.1.0.wasm",
+        "--world",
         "adder",
+        ".",
         mode=mode,
     )
     run_cli(work_dir, "bind", mode=mode)

@@ -2,42 +2,65 @@ import shutil
 from pathlib import Path
 
 import pytest
-from utils import (
-    CLI_MODES,
-    clang_supports_wasm,
-    cli_mode_available,
-    run_cli,
-    run_runtime,
-    runtime_available,
-)
+from utils import CLI_MODES, cli_mode_available, run_cli
 
-LANG_EXPECTED = {
-    "python": "Hello from Python WASM!",
-    "go": "Hello from Go WASM!",
-    "js": "Hello from JS WASM!",
-    "rust": "Hello from Rust WASM!",
-    "c": "Hello from C WASM!",
-}
+from tarawasm.backends import get_backend
 
-@pytest.mark.parametrize("mode", CLI_MODES, ids=lambda m: f"cli:{m}")
-@pytest.mark.parametrize("lang,expected", LANG_EXPECTED.items(), ids=lambda x: f"lang:{x}")
-def test_examples(lang, expected, tmp_path, mode):
+LANGUAGES = ("python", "go", "js", "rust", "c")
+
+
+@pytest.mark.parametrize("mode", CLI_MODES, ids=lambda value: f"cli:{value}")
+@pytest.mark.parametrize("language", LANGUAGES, ids=lambda value: f"lang:{value}")
+def test_import_bind_build(language, tmp_path, mode):
     if not cli_mode_available(mode):
         pytest.skip(f"CLI mode '{mode}' not available in this environment")
-    if not runtime_available(mode):
-        pytest.skip("Runtime is not available for this mode")
+    if mode != "docker" and get_backend(language).doctor():
+        pytest.skip(
+            f"Local {language} toolchain is incomplete: "
+            f"{', '.join(get_backend(language).doctor())}"
+        )
+    fixture = (
+        Path(__file__).resolve().parents[1]
+        / "examples"
+        / language
+        / "docs:adder@0.1.0.wasm"
+    )
+    shutil.copy(fixture, tmp_path / "input.wasm")
+    run_cli(
+        tmp_path,
+        "import",
+        "--lang",
+        language,
+        "--component",
+        "input.wasm",
+        "--world",
+        "adder",
+        ".",
+        mode=mode,
+    )
+    run_cli(tmp_path, "bind", mode=mode)
+    run_cli(tmp_path, "build", mode=mode)
+    assert (tmp_path / "dist/adder.wasm").is_file()
 
-    if mode != "docker" and lang == "c" and not clang_supports_wasm():
-        pytest.skip("clang is not built with wasm32-unknown-wasi target")
 
-    wasm_src = Path(__file__).resolve().parents[1] / "examples" / lang / "docs:adder@0.1.0.wasm"
-    work_dir = tmp_path
-    shutil.copy(wasm_src, work_dir)
-
-    run_cli(work_dir, "init", "--lang", lang, "--wasm-file", "docs:adder@0.1.0.wasm", "adder", mode=mode)
-    run_cli(work_dir, "bind", mode=mode)
-    run_cli(work_dir, "build", mode=mode)
-
-    wasm_file = work_dir / "dist" / ("adder.component.wasm" if lang == "c" else "adder.wasm")
-    result = run_runtime(work_dir, wasm_file, mode=mode)
-    assert result.stdout.strip() == expected
+@pytest.mark.parametrize("language", LANGUAGES, ids=lambda value: f"lang:{value}")
+def test_wit_first_bind_build_in_docker(language, tmp_path):
+    if not cli_mode_available("docker"):
+        pytest.skip("Docker CLI mode is not available in this environment")
+    fixture = Path(__file__).resolve().parents[1] / "examples" / language / "wit"
+    shutil.copytree(fixture, tmp_path / "wit")
+    run_cli(
+        tmp_path,
+        "init",
+        "--lang",
+        language,
+        "--wit",
+        "wit",
+        "--world",
+        "adder",
+        ".",
+        mode="docker",
+    )
+    run_cli(tmp_path, "bind", mode="docker")
+    run_cli(tmp_path, "build", mode="docker")
+    assert (tmp_path / "dist/adder.wasm").is_file()

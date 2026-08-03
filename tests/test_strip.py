@@ -35,18 +35,20 @@ def test_strip_reduces_size(lang, tmp_path, mode):
 
     run_cli(
         work_dir,
-        "init",
+        "import",
         "--lang",
         lang,
-        "--wasm-file",
+        "--component",
         "docs:adder@0.1.0.wasm",
+        "--world",
         "adder",
+        ".",
         mode=mode,
     )
     run_cli(work_dir, "bind", mode=mode)
     run_cli(work_dir, "build", mode=mode)
 
-    wasm_filename = "dist/adder.component.wasm" if lang == "c" else "dist/adder.wasm"
+    wasm_filename = "dist/adder.wasm"
     wasm_filepath = work_dir / wasm_filename
     assert wasm_filepath.exists(), f"WASM output file not found: {wasm_filepath}"
 

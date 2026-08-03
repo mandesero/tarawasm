@@ -1,278 +1,289 @@
+import json
+import subprocess
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
-from tarawasm.cli import clean, cli
-from tarawasm.config import LANG_CFGS, Config
+from tarawasm.backends.base import Command
+from tarawasm.cli import cli
+from tarawasm.config import Config
+
+CALCULATOR_WIT = """package test:calculator@0.1.0;
+world calculator { export add: func(a: s32, b: s32) -> s32; }
+"""
 
 
-def _config(lang: str = "python") -> Config:
-    src = LANG_CFGS[lang]["default-src"]
-    return Config(
-        world="adder",
-        lang=lang,
-        wit_path=Path("wit"),
-        src_file=src,
-        wasm_file="docs:adder@0.1.0.wasm",
+def _write_project(tmp_path: Path, monkeypatch, language: str = "python") -> Config:
+    wit = tmp_path / "calculator.wit"
+    wit.write_text(CALCULATOR_WIT)
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(
+        cli, ["init", "--lang", language, "--wit", str(wit), "."]
     )
+    assert result.exit_code == 0, result.output
+    return Config.load(tmp_path)
 
 
-def test_bind_uses_common_overrides_and_passthrough(monkeypatch):
-    conf = _config()
+@pytest.mark.parametrize(
+    "language,source",
+    [
+        ("python", "main.py"),
+        ("go", "main.go"),
+        ("js", "main.js"),
+        ("rust", "src/lib.rs"),
+        ("c", "component.c"),
+    ],
+)
+def test_wit_first_init_for_each_backend(tmp_path, monkeypatch, language, source):
+    conf = _write_project(tmp_path, monkeypatch, language)
+    assert conf.language == language
+    assert conf.world == "calculator"
+    assert conf.wit_package == "test:calculator@0.1.0"
+    assert conf.source == Path(source)
+    assert conf.output == Path("dist/calculator.wasm")
+    assert conf.resolve_path(conf.source).is_file()
+
+
+def test_init_wasm_file_is_standard_unknown_option(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(
+        cli,
+        ["init", "--lang", "python", "--wasm-file", "input.wasm", "project"],
+    )
+    assert result.exit_code == 2
+    assert "No such option '--wasm-file'" in result.output
+
+
+def test_init_dry_run_does_not_mutate_filesystem(tmp_path, monkeypatch):
+    wit = tmp_path / "calculator.wit"
+    wit.write_text(CALCULATOR_WIT)
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "init",
+            "--lang",
+            "python",
+            "--wit",
+            str(wit),
+            "--dry-run",
+            "project",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert not (tmp_path / "project").exists()
+    assert list(tmp_path.iterdir()) == [wit]
+
+
+def test_init_does_not_overwrite_user_source_even_with_force(tmp_path, monkeypatch):
+    conf = _write_project(tmp_path, monkeypatch)
+    source = conf.resolve_path(conf.source)
+    source.write_text("# user implementation\n")
+    result = CliRunner().invoke(
+        cli,
+        ["init", "--lang", "python", "--wit", "calculator.wit", "--force", "."],
+    )
+    assert result.exit_code != 0
+    assert "Existing source files are never overwritten" in result.output
+    assert source.read_text() == "# user implementation\n"
+
+
+def test_init_ambiguous_world_lists_choices(tmp_path, monkeypatch):
+    wit = tmp_path / "multi.wit"
+    wit.write_text("package test:multi@0.1.0; world first {} world second {}")
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(
+        cli, ["init", "--lang", "python", "--wit", str(wit), "project"]
+    )
+    assert result.exit_code != 0
+    assert "multiple worlds: first, second" in result.output
+    assert not (tmp_path / "project").exists()
+
+
+def test_bind_uses_backend_and_passthrough(tmp_path, monkeypatch):
+    conf = _write_project(tmp_path, monkeypatch)
     captured = {}
     commands = []
 
+    class FakeBackend:
+        def bind_commands(self, loaded, **kwargs):
+            captured.update(kwargs)
+            assert loaded == conf
+            return (Command(("bind-tool", "--base", *kwargs["tool_args"])),)
+
     monkeypatch.setattr("tarawasm.cli.Config.load", lambda: conf)
-
-    def fake_bind_args(lang, loaded, **kwargs):
-        captured["lang"] = lang
-        captured["loaded"] = loaded
-        captured["kwargs"] = kwargs
-        return ["bind-tool"], ["--base-bind", *kwargs["tool_args"]]
-
-    monkeypatch.setattr("tarawasm.cli.bind_args", fake_bind_args)
+    monkeypatch.setattr("tarawasm.cli.get_backend", lambda _name: FakeBackend())
+    monkeypatch.setattr("tarawasm.cli._parse_selected_world", lambda *_args: object())
     monkeypatch.setattr(
         "tarawasm.cli.subprocess.run",
-        lambda cmd, check, **_: commands.append((cmd, check)),
+        lambda argv, check, env: commands.append((argv, check)),
     )
-
-    runner = CliRunner()
-    result = runner.invoke(
+    result = CliRunner().invoke(
         cli,
         [
             "bind",
             "--world",
-            "custom-world",
+            "calculator",
             "--wit",
-            "custom-wit",
+            "calculator.wit",
             "--",
-            "--lang-flag",
-            "42",
+            "--flag",
         ],
     )
-
-    assert result.exit_code == 0
-    assert captured["lang"] == "python"
-    assert captured["loaded"] == conf
-    assert captured["kwargs"] == {
-        "world_override": "custom-world",
-        "wit_override": Path("custom-wit"),
-        "tool_args": ["--lang-flag", "42"],
+    assert result.exit_code == 0, result.output
+    assert captured == {
+        "world": "calculator",
+        "wit": tmp_path / "calculator.wit",
+        "tool_args": ["--flag"],
     }
-    assert commands == [(["bind-tool", "--base-bind", "--lang-flag", "42"], True)]
+    assert commands == [(("bind-tool", "--base", "--flag"), True)]
 
 
-def test_build_uses_common_overrides_and_passthrough(monkeypatch):
-    conf = _config()
-    captured = {}
-    commands = []
+def test_bind_dry_run_does_not_invoke_tool_or_create_manifest(tmp_path, monkeypatch):
+    _write_project(tmp_path, monkeypatch)
+    result = CliRunner().invoke(cli, ["bind", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert "Running:" in result.output
+    assert not (tmp_path / ".tarawasm/artifacts.json").exists()
 
-    monkeypatch.setattr("tarawasm.cli.Config.load", lambda: conf)
 
-    def fake_build_args(lang, loaded, **kwargs):
-        captured["lang"] = lang
-        captured["loaded"] = loaded
-        captured["kwargs"] = kwargs
-        return ["build-tool"], ["--base-build", *kwargs["tool_args"]]
-
-    monkeypatch.setattr("tarawasm.cli.build_args", fake_build_args)
-    monkeypatch.setattr(
-        "tarawasm.cli.subprocess.run",
-        lambda cmd, check, env=None, **_: commands.append((cmd, check, env)),
+def test_component_import_is_first_class_and_does_not_track_original(
+    tmp_path, monkeypatch
+):
+    fixture = (
+        Path(__file__).resolve().parents[1] / "examples/python/docs:adder@0.1.0.wasm"
     )
-
-    runner = CliRunner()
-    result = runner.invoke(
+    original = tmp_path / "input.wasm"
+    original.write_bytes(fixture.read_bytes())
+    project = tmp_path / "project"
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(
         cli,
         [
-            "build",
+            "import",
+            "--lang",
+            "python",
+            "--component",
+            str(original),
             "--world",
-            "custom-world",
-            "--src",
-            "custom.py",
-            "--wit",
-            "custom-wit",
-            "--out",
-            "custom.wasm",
-            "--",
-            "--lang-flag",
-            "42",
+            "adder",
+            str(project),
         ],
     )
+    assert result.exit_code == 0, result.output
+    conf = Config.load(project)
+    assert conf.wit_path == Path(".tarawasm/imported-wit")
+    assert conf.wit_package == "docs:adder@0.1.0"
+    assert conf.resolve_path(conf.wit_path).is_dir()
+    assert (project / ".tarawasm/imported-wit/deps/cli/package.wit").is_file()
+    data = json.loads((project / "tarawasm.json").read_text())
+    assert "component" not in data
+    assert "wasm_file" not in data
+    monkeypatch.chdir(project)
+    clean_result = CliRunner().invoke(cli, ["clean"])
+    assert clean_result.exit_code == 0
+    assert original.is_file()
 
-    assert result.exit_code == 0
-    assert captured["lang"] == "python"
-    assert captured["loaded"] == conf
-    assert captured["kwargs"] == {
-        "world_override": "custom-world",
-        "wit_override": Path("custom-wit"),
-        "src_override": "custom.py",
-        "out_override": "custom.wasm",
-        "tool_args": ["--lang-flag", "42"],
-    }
-    assert commands[0][0] == ["build-tool", "--base-build", "--lang-flag", "42"]
-    assert commands[0][1] is True
 
-
-def test_build_clean_runs_clean_before_build(monkeypatch):
-    conf = _config()
-    calls = {"clean": 0, "build": 0}
-
-    monkeypatch.setattr("tarawasm.cli.Config.load", lambda: conf)
-    monkeypatch.setattr(
-        "tarawasm.cli.build_args", lambda *_args, **_kwargs: (["tool"], [])
+def test_component_import_rejects_core_module_without_creating_project(
+    tmp_path, monkeypatch
+):
+    core = tmp_path / "core.wasm"
+    core.write_bytes(b"\x00asm\x01\x00\x00\x00")
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "import",
+            "--lang",
+            "python",
+            "--component",
+            str(core),
+            "project",
+        ],
     )
+    assert result.exit_code != 0
+    assert "not a WebAssembly Component Model binary" in result.output
+    assert not (tmp_path / "project").exists()
+
+
+def test_failed_build_preserves_previous_output(tmp_path, monkeypatch):
+    conf = _write_project(tmp_path, monkeypatch)
+    output = conf.resolve_path(conf.output)
+    output.parent.mkdir()
+    output.write_bytes(b"previous component")
+
+    class FailingBackend:
+        def validate_world(self, _world):
+            return None
+
+        def build_command(self, loaded, **kwargs):
+            assert loaded == conf
+            return Command(("failing-tool",))
+
+        def finish_build_command(self, *_args, **_kwargs):
+            return None
+
+        def locate_artifact(self, _conf, requested):
+            return requested
+
+    monkeypatch.setattr("tarawasm.cli.get_backend", lambda _name: FailingBackend())
     monkeypatch.setattr(
         "tarawasm.cli.subprocess.run",
-        lambda cmd, check, env=None, **_: calls.__setitem__(
-            "build", calls["build"] + 1
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            subprocess.CalledProcessError(7, ["failing-tool"])
         ),
     )
-
-    original_clean_callback = clean.callback
-
-    def fake_clean_callback(*_args, **_kwargs):
-        calls["clean"] += 1
-
-    monkeypatch.setattr(clean, "callback", fake_clean_callback)
-
-    runner = CliRunner()
-    result = runner.invoke(cli, ["build", "--clean"])
-
-    monkeypatch.setattr(clean, "callback", original_clean_callback)
-
-    assert result.exit_code == 0
-    assert calls["clean"] == 1
-    assert calls["build"] == 1
-
-
-def test_bind_rejects_common_option_in_tool_args():
-    runner = CliRunner()
-    result = runner.invoke(cli, ["bind", "--", "--world", "late"])
-
+    result = CliRunner().invoke(cli, ["build"])
     assert result.exit_code != 0
-    assert "Common option '--world' must be provided before '--'." in result.output
+    assert output.read_bytes() == b"previous component"
 
 
-def test_build_rejects_common_option_in_tool_args():
-    runner = CliRunner()
-    result = runner.invoke(cli, ["build", "--", "--out=late.wasm"])
+def test_custom_output_is_manifested_and_cleaned(tmp_path, monkeypatch):
+    conf = _write_project(tmp_path, monkeypatch)
+    external = tmp_path.parent / f"{tmp_path.name}-custom.wasm"
 
-    assert result.exit_code != 0
-    assert "Common option '--out' must be provided before '--'." in result.output
+    class SuccessfulBackend:
+        def validate_world(self, _world):
+            return None
 
+        def build_command(self, loaded, **kwargs):
+            assert loaded == conf
+            return Command(("successful-tool", str(kwargs["output"])))
 
-def test_bind_requires_separator_for_tool_specific_options():
-    runner = CliRunner()
-    result = runner.invoke(cli, ["bind", "--tool-specific-flag", "42"])
+        def finish_build_command(self, *_args, **_kwargs):
+            return None
 
-    assert result.exit_code != 0
-    assert "No such option: --tool-specific-flag" in result.output
+        def locate_artifact(self, _conf, requested):
+            return requested
 
+    def fake_run(argv, check, env):
+        assert check is True
+        Path(argv[1]).parent.mkdir(parents=True, exist_ok=True)
+        Path(argv[1]).write_bytes(b"component")
 
-def test_bind_tool_help_runs_tool_help_only(monkeypatch):
-    conf = _config()
-    commands = []
-
-    monkeypatch.setattr("tarawasm.cli.Config.load", lambda: conf)
-
-    def fake_bind_args(*_args, **_kwargs):
-        return ["bind-tool"], ["--base-bind"]
-
-    monkeypatch.setattr("tarawasm.cli.bind_args", fake_bind_args)
-    monkeypatch.setattr(
-        "tarawasm.cli.subprocess.run",
-        lambda cmd, **kwargs: commands.append((cmd, kwargs)),
-    )
-
-    runner = CliRunner()
-    result = runner.invoke(cli, ["bind", "--tool-help", "--", "--lang-flag", "42"])
-
-    assert result.exit_code == 0
-    assert commands == [(["bind-tool", "--help"], {"check": False})]
-
-
-def test_build_tool_help_skips_clean_and_runs_help_only(monkeypatch):
-    conf = _config()
-    calls = {"clean": 0}
-    commands = []
-
-    monkeypatch.setattr("tarawasm.cli.Config.load", lambda: conf)
-
-    def fake_build_args(*_args, **_kwargs):
-        return ["build-tool"], ["--base-build"]
-
-    monkeypatch.setattr("tarawasm.cli.build_args", fake_build_args)
-    monkeypatch.setattr(
-        "tarawasm.cli.subprocess.run",
-        lambda cmd, **kwargs: commands.append((cmd, kwargs)),
-    )
-
-    original_clean_callback = clean.callback
-
-    def fake_clean_callback(*_args, **_kwargs):
-        calls["clean"] += 1
-
-    monkeypatch.setattr(clean, "callback", fake_clean_callback)
-
-    runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        ["build", "--clean", "--tool-help", "--", "--lang-flag", "42"],
-    )
-
-    monkeypatch.setattr(clean, "callback", original_clean_callback)
-
-    assert result.exit_code == 0
-    assert calls["clean"] == 0
-    assert commands == [(["build-tool", "--help"], {"check": False})]
+    monkeypatch.setattr("tarawasm.cli.get_backend", lambda _name: SuccessfulBackend())
+    monkeypatch.setattr("tarawasm.cli._parse_selected_world", lambda *_args: object())
+    monkeypatch.setattr("tarawasm.cli.subprocess.run", fake_run)
+    monkeypatch.setattr("tarawasm.cli.WitParser.parse", lambda *_args: object())
+    result = CliRunner().invoke(cli, ["build", "--out", str(external)])
+    assert result.exit_code == 0, result.output
+    assert external.read_bytes() == b"component"
+    manifest = json.loads((tmp_path / ".tarawasm/artifacts.json").read_text())
+    assert str(external) in manifest["external_artifacts"]
+    clean_result = CliRunner().invoke(cli, ["clean"])
+    assert clean_result.exit_code == 0
+    assert not external.exists()
 
 
-def test_bind_tool_help_uses_correct_tool_per_language(monkeypatch):
-    commands = []
-    monkeypatch.setattr(
-        "tarawasm.cli.subprocess.run",
-        lambda cmd, **kwargs: commands.append((cmd, kwargs)),
-    )
-    runner = CliRunner()
-
-    expected = {
-        "python": ["componentize-py"],
-        "go": ["go", "tool", "wit-bindgen-go"],
-        "js": ["jco", "guest-types"],
-        "rust": ["cargo", "component", "bindings"],
-        "c": ["wit-bindgen", "c"],
-    }
-
-    for lang, prefix in expected.items():
-        monkeypatch.setattr("tarawasm.cli.Config.load", lambda lang=lang: _config(lang))
-        result = runner.invoke(cli, ["bind", "--tool-help"])
-        assert result.exit_code == 0
-        cmd, kwargs = commands.pop(0)
-        assert cmd == prefix + ["--help"]
-        assert kwargs == {"check": False}
-
-
-def test_build_tool_help_uses_correct_tool_per_language(monkeypatch):
-    commands = []
-    monkeypatch.setattr(
-        "tarawasm.cli.subprocess.run",
-        lambda cmd, **kwargs: commands.append((cmd, kwargs)),
-    )
-    runner = CliRunner()
-
-    expected = {
-        "python": ["componentize-py"],
-        "go": ["tinygo", "build"],
-        "js": ["jco", "componentize"],
-        "rust": ["cargo", "component", "build"],
-        "c": ["clang"],
-    }
-
-    for lang, prefix in expected.items():
-        monkeypatch.setattr("tarawasm.cli.Config.load", lambda lang=lang: _config(lang))
-        result = runner.invoke(cli, ["build", "--tool-help"])
-        assert result.exit_code == 0
-        cmd, kwargs = commands.pop(0)
-        assert cmd == prefix + ["--help"]
-        assert kwargs == {"check": False}
+def test_dependency_resolve_creates_lock_without_build_side_effects(
+    tmp_path, monkeypatch
+):
+    _write_project(tmp_path, monkeypatch)
+    result = CliRunner().invoke(cli, ["deps", "resolve"])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "wkg.lock").is_file()
+    listed = CliRunner().invoke(cli, ["deps", "list"])
+    assert listed.exit_code == 0
+    assert "No locked WIT dependencies" in listed.output
