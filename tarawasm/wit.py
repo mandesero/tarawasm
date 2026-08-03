@@ -47,6 +47,7 @@ class WitItem:
     kind: str
     function: WitFunction | None = None
     interface: WitInterface | None = None
+    type: WitType | None = None
 
 
 @dataclass(frozen=True)
@@ -179,11 +180,21 @@ class WitParser:
                 kind="function",
                 function=self._decode_function(item["function"], types),
             )
-        interface = item["interface"]
-        return WitItem(
-            name=name,
-            kind="interface",
-            interface=interfaces[int(interface["id"])],
+        if "interface" in item:
+            interface = item["interface"]
+            return WitItem(
+                name=name,
+                kind="interface",
+                interface=interfaces[int(interface["id"])],
+            )
+        if "type" in item:
+            return WitItem(
+                name=name,
+                kind="type",
+                type=self._type_ref(item["type"], types),
+            )
+        raise ValueError(
+            f"Unsupported world item '{name}'; expected function, interface, or type"
         )
 
     def _decode_function(

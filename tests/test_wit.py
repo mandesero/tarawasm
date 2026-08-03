@@ -56,6 +56,28 @@ def test_parser_models_functions_interfaces_resources_and_types(tmp_path):
     assert transform.result is not None and transform.result.kind == "result"
 
 
+def test_parser_models_world_defined_types(tmp_path):
+    wit_path = tmp_path / "world-types.wit"
+    wit_path.write_text(
+        """package test:world-types@0.1.0;
+world typed {
+    variant payload { bytes(list<u8>), number(s32) }
+    import receive: func(value: payload);
+    export send: func(value: payload);
+}
+"""
+    )
+
+    world = WitParser().parse(wit_path).select_world("typed")
+
+    assert [(item.name, item.kind) for item in world.imports] == [
+        ("payload", "type"),
+        ("receive", "function"),
+    ]
+    assert world.imports[0].type is not None
+    assert world.imports[0].type.kind == "variant"
+
+
 def test_world_selection_auto_selects_only_world(tmp_path):
     wit_path = tmp_path / "one.wit"
     wit_path.write_text("package test:one@0.1.0; world only { export ping: func(); }")
