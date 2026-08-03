@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Go manually
 RUN rm -rf /usr/local/go && \
-    curl -L https://go.dev/dl/go1.26.0.linux-amd64.tar.gz -o go.tar.gz && \
+    curl -L https://go.dev/dl/go1.25.6.linux-amd64.tar.gz -o go.tar.gz && \
     tar -C /usr/local -xzf go.tar.gz && \
     rm go.tar.gz
 ENV PATH="/usr/local/go/bin:${PATH}"
