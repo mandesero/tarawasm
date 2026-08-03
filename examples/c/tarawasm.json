@@ -1,9 +1,7 @@
 {
+  "language": "c",
   "world": "adder",
-  "lang": "c",
-  "wit_path": "wit",
-  "src_file": "main.c",
-  "wasm_file": "docs:adder@0.1.0.wasm",
-  "state_dir": ".tarawasm",
-  "dist_dir": "dist"
+  "wit": { "path": "wit", "package": "docs:adder@0.1.0" },
+  "source": "main.c",
+  "output": "dist/adder.wasm"
 }

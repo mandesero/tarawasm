@@ -1,56 +1,10 @@
-# Rust Example
+# Rust example
 
-This example demonstrates building and running a simple WASM component in Rust using Tarawasm.
+```console
+tarawasm init --lang rust --wit ./wit --world adder .
+tarawasm bind
+tarawasm build
+```
 
-## Steps
-
-1. **Initialize**
-   Extract WIT definitions and save project config:
-
-   ```bash
-   tarawasm init --lang rust --wasm-file docs:adder@0.1.0.wasm adder
-   ```
-
-2. **Generate bindings**
-
-   ```bash
-   tarawasm bind
-   ```
-
-3. **Write your code**
-   Change `src/lib.rs` in the project root:
-
-   ```rs
-   #[allow(warnings)]
-   mod bindings;
-
-   use bindings::exports::wasi::cli::run::Guest;
-
-   struct Component;
-
-   impl Guest for Component {
-      fn run() -> Result<(),()> {
-         println!("Hello from Rust WASM!");
-         Ok(())
-      }
-   }
-
-   bindings::export!(Component with_types_in bindings);
-   ```
-
-4. **Build**
-
-   ```bash
-   tarawasm build
-   ```
-
-   This produces `dist/adder.wasm`.
-
-5. **Run**
-   Use any WASM runtime, e.g. Wasmtime:
-
-   ```bash
-   wasmtime dist/adder.wasm
-   # Output:
-   Hello from Rust WASM!
-   ```
+Cargo target data is kept under `.tarawasm/build/rust`; the final component is
+`dist/adder.wasm`.

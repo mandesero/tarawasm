@@ -1,9 +1,7 @@
 {
+  "language": "rust",
   "world": "adder",
-  "lang": "rust",
-  "wit_path": "wit",
-  "src_file": null,
-  "wasm_file": "docs:adder@0.1.0.wasm",
-  "state_dir": ".tarawasm",
-  "dist_dir": "dist"
+  "wit": { "path": "wit", "package": "docs:adder@0.1.0" },
+  "source": "src/lib.rs",
+  "output": "dist/adder.wasm"
 }

@@ -1,46 +1,13 @@
-# Python Example
+# Python example
 
-This example demonstrates building and running a simple WASM component in Python using Tarawasm.
+This project uses `wit/` as its source contract.
 
-## Steps
+```console
+tarawasm init --lang python --wit ./wit --world adder .
+tarawasm bind
+tarawasm build
+```
 
-1. **Initialize**
-   Extract WIT definitions and save project config:
-
-   ```bash
-   tarawasm init --lang python --wasm-file docs:adder@0.1.0.wasm adder
-   ```
-
-2. **Generate bindings**
-
-   ```bash
-   tarawasm bind
-   ```
-
-3. **Write your code**
-   Create `main.py` in the project root:
-
-   ```python
-   from adder import exports
-
-   class Run(exports.Run):
-       def run(self) -> None:
-           print("Hello from Python WASM!")
-   ```
-
-4. **Build**
-
-   ```bash
-   tarawasm build
-   ```
-
-   This produces `dist/adder.wasm`.
-
-5. **Run**
-   Use any WASM runtime, e.g. Wasmtime:
-
-   ```bash
-   wasmtime dist/adder.wasm
-   # Output:
-   Hello from Python WASM!
-   ```
+The final component is `dist/adder.wasm`. To start instead from the checked-in
+component fixture, run `tarawasm import --lang python --component
+docs:adder@0.1.0.wasm --world adder .` in an empty directory.

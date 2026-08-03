@@ -1,9 +1,7 @@
 {
+  "language": "python",
   "world": "adder",
-  "lang": "python",
-  "wit_path": "wit",
-  "src_file": "main.py",
-  "wasm_file": "docs:adder@0.1.0.wasm",
-  "state_dir": ".tarawasm",
-  "dist_dir": "dist"
+  "wit": { "path": "wit", "package": "docs:adder@0.1.0" },
+  "source": "main.py",
+  "output": "dist/adder.wasm"
 }

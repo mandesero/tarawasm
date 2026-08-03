@@ -1,46 +1,10 @@
-# JavaScript Example
+# JavaScript example
 
-This example demonstrates building and running a simple WASM component in JavaScript using Tarawasm.
+```console
+tarawasm init --lang js --wit ./wit --world adder .
+tarawasm bind
+tarawasm build
+```
 
-## Steps
-
-1. **Initialize**
-   Extract WIT definitions and save project config:
-
-   ```bash
-   tarawasm init --lang js --wasm-file docs:adder@0.1.0.wasm adder
-   ```
-
-2. **Generate bindings**
-
-   ```bash
-   tarawasm bind
-   ```
-
-3. **Write your code**
-   Create `main.js` in the project root:
-
-   ```js
-   export const run = {
-      run: async function() {
-         console.info("Hello from JS WASM!")
-      }
-   }
-   ```
-
-4. **Build**
-
-   ```bash
-   tarawasm build
-   ```
-
-   This produces `dist/adder.wasm`.
-
-5. **Run**
-   Use any WASM runtime, e.g. Wasmtime:
-
-   ```bash
-   wasmtime dist/adder.wasm
-   # Output:
-   Hello from JS WASM!
-   ```
+The final component is `dist/adder.wasm`. `docs:adder@0.1.0.wasm` is retained
+only as a fixture for the separate `tarawasm import` workflow.
