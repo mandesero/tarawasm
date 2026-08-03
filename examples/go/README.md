@@ -46,13 +46,13 @@ This example demonstrates building and running a simple WASM component in Golang
     tarawasm build
     ```
 
-   This produces `adder.wasm` in the current directory.
+   This produces `dist/adder.wasm`.
 
 5. **Run**
     Use any WASM runtime, e.g. Wasmtime:
 
     ```bash
-    wasmtime adder.wasm
+    wasmtime dist/adder.wasm
     # Output:
     Hello from Go WASM!
     ```

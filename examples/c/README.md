@@ -36,13 +36,13 @@ This example demonstrates building and running a simple WASM component in C/C++ 
     tarawasm build
     ```
 
-   This produces `adder.component.wasm` in the current directory.
+   This produces `dist/adder.component.wasm`.
 
 5. **Run**
     Use any WASM runtime, e.g. Wasmtime:
 
     ```bash
-    wasmtime adder.component.wasm
+    wasmtime dist/adder.component.wasm
     # Output:
     Hello from C WASM!
     ```

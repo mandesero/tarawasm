@@ -77,7 +77,7 @@ tarawasm init --lang python --wasm-file docs:adder@0.1.0.wasm adder
 tarawasm bind
 tarawasm build
 
-wasmtime adder.wasm
+wasmtime dist/adder.wasm
 # Hello from Python WASM!
 ```
 
@@ -139,14 +139,42 @@ When building Python components, install additional packages via:
 
 ```bash
 tarawasm pip install <package>
+tarawasm pip install -r requirements.txt
 ```
 
-By default, packages are persisted in `./.tarawasm/site-packages` in your mounted project folder.
+Packages are installed in `./.tarawasm/site-packages` in the mounted project.
+That directory is automatically included in Python component builds, persists
+across container invocations, and is preserved by `tarawasm clean`.
 
-Override location if needed:
+Manage the same environment without rebuilding the image:
 
 ```bash
-TARAWASM_PY_SITE_PACKAGES=/work/.custom-python-site tarawasm pip install <package>
+tarawasm pip list
+tarawasm pip show <package>
+tarawasm pip check
+tarawasm pip uninstall <package>
+```
+
+Do not pass pip location options such as `--target`, `--user`, `--prefix`, or
+`--root`: tarawasm rejects them so dependencies cannot be silently installed
+outside the build import path. Package-provided command-line executables are not
+automatically added to `PATH`; this facility is intended for Python imports used
+while componentizing. Packages must also be compatible with the Python-to-Wasm
+toolchain; installing a package does not make arbitrary native extensions usable
+inside a component.
+
+For an advanced custom location, pass the same environment variable to every
+install and build container:
+
+```bash
+docker run --rm \
+  -e TARAWASM_PY_SITE_PACKAGES=/work/.custom-python-site \
+  -v "$PWD":/work -w /work mandeser0/tarawasm \
+  pip install <package>
+docker run --rm \
+  -e TARAWASM_PY_SITE_PACKAGES=/work/.custom-python-site \
+  -v "$PWD":/work -w /work mandeser0/tarawasm \
+  build
 ```
 
 ## Workflow
@@ -172,6 +200,24 @@ tarawasm init --lang <lang> --wasm-file <input.wasm> --wit-dir ./wit --src-file 
 ```
 
 `init` writes `tarawasm.json`, extracts WIT, and generates starter source from templates.
+The current config format is strict and unversioned:
+
+```json
+{
+  "world": "adder",
+  "lang": "python",
+  "wit_path": "wit",
+  "src_file": "main.py",
+  "wasm_file": "input.wasm",
+  "state_dir": ".tarawasm",
+  "dist_dir": "dist"
+}
+```
+
+Relative paths are resolved from the directory containing `tarawasm.json`.
+Commands may be run from that directory or any descendant; tarawasm discovers the
+project root by walking upward. Older configs must be updated with `state_dir` and
+`dist_dir` before use.
 
 ### 3) Generate bindings
 
@@ -202,6 +248,9 @@ tarawasm bind --tool-help
 ```bash
 tarawasm build
 ```
+
+The default output is `dist/<world>.wasm` (`dist/<world>.component.wasm` for C).
+Temporary compiler state owned by tarawasm is stored under `.tarawasm/`.
 
 One-off overrides:
 
@@ -252,22 +301,28 @@ tarawasm build -- -O0
 | `tarawasm init` | Initialize project and save config |
 | `tarawasm bind` | Generate bindings from WIT |
 | `tarawasm build` | Compile source into WASM component |
-| `tarawasm clean` | Remove generated artifacts |
+| `tarawasm clean` | Remove only artifacts recorded in `.tarawasm/artifacts.json` |
 | `tarawasm all` | Run `clean` + `bind` + `build` |
 | `tarawasm strip` | Remove custom sections from a WASM binary |
 
 `strip` default output:
 
 ```bash
-tarawasm strip adder.wasm
-# writes adder.strip.wasm
+tarawasm strip dist/adder.wasm
+# writes dist/adder.strip.wasm
 ```
 
 Custom output:
 
 ```bash
-tarawasm strip adder.wasm --output adder.min.wasm
+tarawasm strip dist/adder.wasm --output dist/adder.min.wasm
 ```
+
+`clean` never scans for generic names such as `target`, `internal`, or `*.wasm`.
+Pre-existing user files and directories are not added to the artifact manifest and
+are therefore preserved. The Docker entrypoint runs as the UID/GID that owns the
+bind-mounted `/work` directory, so generated files remain host-owned without a
+recursive permission change.
 
 ## Examples
 
