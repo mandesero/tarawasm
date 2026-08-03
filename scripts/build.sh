@@ -12,4 +12,4 @@ nuitka \
     --include-data-dir=tarawasm/lang_deps=tarawasm/lang_deps \
     tarawasm/cli.py
 
-echo "Build complete. Generated './tarawasm' binary."
+echo "Build complete. Generated 'target/tarawasm' binary."

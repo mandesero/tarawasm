@@ -1,6 +1,6 @@
 .PHONY: install system-check sdk-check check build shellcheck test-docker-amd64 test-upstream-amd64
 
-SHELLCHECK_FILES := $(shell git ls-files '*.sh')
+SHELLCHECK_FILES = $(shell find docker-scripts scripts -type f -name '*.sh' -print | sort)
 
 install:
 	@./scripts/install_deps.sh

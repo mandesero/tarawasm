@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 # System dependencies
@@ -17,12 +17,13 @@ if command -v apt-get &> /dev/null; then
         python3 \
         python3-dev \
         python3-pip \
+        shellcheck \
         wget
 fi
 
-# Install Go 1.26.0
-GO_VERSION=1.26.0
-GO_HASH=aac1b08a0fb0c4e0a7c1555beb7b59180b05dfc5a3d62e40e9de90cd42f88235
+# TinyGo 0.40.1 supports Go 1.25.x.
+GO_VERSION=1.25.6
+GO_HASH=f022b6aad78e362bcba9b0b94d09ad58c5a70c6ba3b7582905fababf5fe0181a
 if ! command -v go &> /dev/null || [[ "$(go version | awk '{print $3}')" != "go${GO_VERSION}" ]]; then
     wget -q "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"
     echo "${GO_HASH}  go${GO_VERSION}.linux-amd64.tar.gz" | sha256sum -c

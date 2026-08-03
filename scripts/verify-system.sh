@@ -2,7 +2,7 @@
 set -euo pipefail
 
 declare -A REQUIRED_VERSIONS=(
-  [go]=1.26.0
+  [go]=1.25.0
   [rustc]=1.93.1
   [tinygo]=0.40.1
   [node]=24.0.0
@@ -48,6 +48,12 @@ check_tool() {
       error_flag=1
       return
     fi
+  fi
+  if [[ "$cmd" == "go" && "$found" != 1.25.* ]]; then
+    printf "%-10s %-10s %-6s %s (found %s)\n" \
+      "$cmd" "1.25.x" "ERROR" "TinyGo 0.40.1 requires Go 1.25.x" "$found"
+    error_flag=1
+    return
   fi
 
   if version_ge "$found" "$need"; then

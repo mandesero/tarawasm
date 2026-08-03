@@ -254,7 +254,7 @@ class GoBackend(LanguageBackend):
                 *tool_args,
                 str(source),
             ),
-            {"GOTOOLCHAIN": "go1.25.4+auto"},
+            {"GOTOOLCHAIN": "go1.25.6+auto"},
         )
 
     def generated_artifacts(self, conf):
