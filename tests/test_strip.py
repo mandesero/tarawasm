@@ -46,15 +46,15 @@ def test_strip_reduces_size(lang, tmp_path, mode):
     run_cli(work_dir, "bind", mode=mode)
     run_cli(work_dir, "build", mode=mode)
 
-    wasm_filename = "adder.component.wasm" if lang == "c" else "adder.wasm"
-    wasm_filepath = work_dir / ("adder.component.wasm" if lang == "c" else "adder.wasm")
+    wasm_filename = "dist/adder.component.wasm" if lang == "c" else "dist/adder.wasm"
+    wasm_filepath = work_dir / wasm_filename
     assert wasm_filepath.exists(), f"WASM output file not found: {wasm_filepath}"
 
     original_size = wasm_filepath.stat().st_size
 
     run_cli(work_dir, "strip", str(wasm_filename), "--all", mode=mode)
 
-    stripped_file = work_dir / (wasm_filepath.stem + ".strip.wasm")
+    stripped_file = wasm_filepath.with_name(wasm_filepath.stem + ".strip.wasm")
     assert stripped_file.exists(), f"Stripped file not found: {stripped_file}"
 
     stripped_size = stripped_file.stat().st_size

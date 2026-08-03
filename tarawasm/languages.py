@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import List, Tuple
 
 from .config import LANG_CFGS, Config
 
@@ -14,7 +13,7 @@ def bind_args(
     world_override: str | None = None,
     wit_override: Path | None = None,
     tool_args: list[str] | None = None,
-) -> Tuple[List[str], List[str]]:
+) -> tuple[list[str], list[str]]:
     passthrough = list(tool_args or [])
     cfg = LANG_CFGS[lang]
     wit_path = str(wit_override or conf.wit_path)
@@ -57,7 +56,7 @@ def build_args(
     src_override: str | None = None,
     out_override: str | None = None,
     tool_args: list[str] | None = None,
-) -> Tuple[List[str], List[str]]:
+) -> tuple[list[str], list[str]]:
     passthrough = list(tool_args or [])
     cfg = LANG_CFGS[lang]
     world = world_override or conf.world
@@ -117,13 +116,16 @@ def build_args(
         args = ["--release", *passthrough]
     elif lang == "c":
         cmd = ["clang"]
+        intermediate = (
+            conf.resolve_path(conf.state_dir) / "build" / "c" / f"{world}.wasm"
+        )
         args = [
             *passthrough,
             src,
             f"{world}.c",
             f"{world}_component_type.o",
             "-o",
-            f"{world}.wasm",
+            str(intermediate),
             "-mexec-model=reactor",
         ]
     else:

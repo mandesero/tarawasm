@@ -1,6 +1,9 @@
 # Ignore build artifacts and generated files
 target/
+.tarawasm/
+dist/
 
 # Python cache
 env/
+.venv/
 __pycache__/

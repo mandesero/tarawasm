@@ -38,6 +38,6 @@ def test_examples(lang, expected, tmp_path, mode):
     run_cli(work_dir, "bind", mode=mode)
     run_cli(work_dir, "build", mode=mode)
 
-    wasm_file = work_dir / ("adder.component.wasm" if lang == "c" else "adder.wasm")
+    wasm_file = work_dir / "dist" / ("adder.component.wasm" if lang == "c" else "adder.wasm")
     result = run_runtime(work_dir, wasm_file, mode=mode)
     assert result.stdout.strip() == expected

@@ -3,13 +3,18 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import stat
 import subprocess
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 import click
 
+from tarawasm.artifacts import ArtifactManifest
 from tarawasm.config import (
+    CONFIG_FILE,
+    DEFAULT_DIST_DIR,
+    DEFAULT_STATE_DIR,
     LANG_CFGS,
     Config,
     ConfigError,
@@ -17,6 +22,16 @@ from tarawasm.config import (
     load_template,
 )
 from tarawasm.languages import bind_args, build_args
+
+
+@contextmanager
+def _project_directory(conf: Config):
+    previous = Path.cwd()
+    os.chdir(conf.project_root)
+    try:
+        yield
+    finally:
+        os.chdir(previous)
 
 
 def _validate_common_options_not_in_tool_args(
@@ -32,48 +47,9 @@ def _validate_common_options_not_in_tool_args(
             )
 
 
-def _make_all_writable(path: str = "."):
-    if os.getenv("INSIDE_DOCKER") != "1":
-        return
-
-    for root, dirs, files in os.walk(path):
-
-        for name in files:
-            file_path = os.path.join(root, name)
-
-            if os.path.islink(file_path) and not os.path.exists(file_path):
-                continue
-
-            os.chmod(
-                file_path,
-                stat.S_IRUSR
-                | stat.S_IWUSR
-                | stat.S_IRGRP
-                | stat.S_IWGRP
-                | stat.S_IROTH
-                | stat.S_IWOTH,
-            )
-
-        for name in dirs:
-            dir_path = os.path.join(root, name)
-            os.chmod(
-                dir_path,
-                stat.S_IRUSR
-                | stat.S_IWUSR
-                | stat.S_IXUSR
-                | stat.S_IRGRP
-                | stat.S_IWGRP
-                | stat.S_IXGRP
-                | stat.S_IROTH
-                | stat.S_IWOTH
-                | stat.S_IXOTH,
-            )
-
-
 @click.group()
 def cli() -> None:
     """tarawasm: CLI for building WebAssembly components"""
-    pass
 
 
 @cli.command()
@@ -114,23 +90,32 @@ def init(
     if src is None:
         raise click.ClickException("No source file specified and no default available")
     # Extract WIT if needed
-    wasm_path = Path(wasm_file)
+    project_root = Path.cwd().resolve()
+    wasm_path = Path(wasm_file).resolve()
     if not wasm_path.exists():
         raise click.ClickException(f"WASM file '{wasm_file}' not found")
 
     if lang == "rust":
-        subprocess.run(["cargo", "component", "new", "--lib", world], check=True)
-        src_dir = Path(world)
-        for item in src_dir.iterdir():
-            target = Path(".") / item.name
-            if target.exists():
-                if target.is_dir():
-                    shutil.rmtree(target)
-                else:
-                    target.unlink()
-            shutil.move(str(item), str(target))
-        src_dir.rmdir()
-        wit_output = Path("./wit")
+        with tempfile.TemporaryDirectory(prefix=".tarawasm-init-") as temporary:
+            staged_project = Path(temporary) / world
+            subprocess.run(
+                ["cargo", "component", "new", "--lib", str(staged_project)],
+                check=True,
+            )
+            conflicts = sorted(
+                item.name
+                for item in staged_project.iterdir()
+                if (project_root / item.name).exists()
+            )
+            if conflicts:
+                raise click.ClickException(
+                    "Rust project initialization would overwrite existing path(s): "
+                    f"{', '.join(conflicts)}."
+                )
+            for item in staged_project.iterdir():
+                shutil.move(str(item), project_root / item.name)
+        wit_output = Path(wit_dir)
+        wit_output.mkdir(parents=True, exist_ok=True)
         out_wit = wit_output / "world.wit"
     else:
         wit_output = Path(wit_dir)
@@ -140,20 +125,19 @@ def init(
     if lang == "c":
         copy_runtime_wasm()
 
-    if lang == "go":
-        if not Path("go.mod").exists():
-            click.echo("Initializing Go module...")
-            subprocess.run(["go", "mod", "init", f"{world}-wasm-bindings"], check=True)
-            subprocess.run(
-                [
-                    "go",
-                    "get",
-                    "-tool",
-                    "go.bytecodealliance.org/cmd/wit-bindgen-go@v0.7.0",
-                ],
-                check=True,
-            )
-            subprocess.run(["go", "get", "go.bytecodealliance.org@v0.7.0"], check=True)
+    if lang == "go" and not Path("go.mod").exists():
+        click.echo("Initializing Go module...")
+        subprocess.run(["go", "mod", "init", f"{world}-wasm-bindings"], check=True)
+        subprocess.run(
+            [
+                "go",
+                "get",
+                "-tool",
+                "go.bytecodealliance.org/cmd/wit-bindgen-go@v0.7.0",
+            ],
+            check=True,
+        )
+        subprocess.run(["go", "get", "go.bytecodealliance.org@v0.7.0"], check=True)
 
     click.echo(f"Extracting WIT from '{wasm_file}' to '{out_wit}'...")
     with open(out_wit, "w") as f:
@@ -169,48 +153,35 @@ def init(
         out.write_text(content)
 
     # Save config
-    conf = Config(world, lang, wit_output, src, wasm_file)
+    conf = Config(
+        world,
+        lang,
+        wit_output,
+        src,
+        wasm_file,
+        state_dir=Path(DEFAULT_STATE_DIR),
+        dist_dir=Path(DEFAULT_DIST_DIR),
+        config_path=project_root / CONFIG_FILE,
+    )
     conf.save()
-    _make_all_writable()
     click.echo("Configuration saved to 'tarawasm.json'")
 
 
 @cli.command()
 @click.pass_context
 def clean(ctx: click.Context) -> None:
-    """Remove build artifacts"""
+    """Remove only artifacts tracked by tarawasm."""
     try:
         conf = Config.load()
     except ConfigError as e:
         raise click.ClickException(str(e))
 
-    lang = conf.lang
-    world = conf.world
-    wasm_file = conf.wasm_file
-
-    click.echo(f"Cleaning {lang} artifacts for world '{world}'...")
-    if lang == "python":
-        shutil.rmtree("wit_world", ignore_errors=True)
-        click.echo("Removed directory 'wit_world'")
-    elif lang == "go" or lang == "js":
-        for item in Path(".").glob("internal"):
-            if item.is_dir():
-                shutil.rmtree(item, ignore_errors=True)
-            else:
-                item.unlink()
-        click.echo(f"Cleaned {lang} artifacts")
-    elif lang == "rust":
-        target_dir = Path("target")
-        if target_dir.exists() and target_dir.is_dir():
-            shutil.rmtree(target_dir)
-    else:
-        click.echo(f"Clean not implemented for {lang}")
-        return
-
-    input_wasm_name = Path(wasm_file).name
-    for item in Path(".").glob("*.wasm"):
-        if item.name != input_wasm_name:
-            item.unlink()
+    manifest = ArtifactManifest(conf.project_root, conf.resolve_path(conf.state_dir))
+    removed = manifest.clean()
+    click.echo(
+        f"Removed {len(removed)} tracked artifact(s) for "
+        f"{conf.lang} world '{conf.world}'."
+    )
 
 
 @cli.command()
@@ -254,23 +225,30 @@ def bind(
     except ConfigError as e:
         raise click.ClickException(str(e))
 
-    lang = conf.lang
-    base_cmd, base_args = bind_args(
-        lang,
-        conf,
-        world_override=world,
-        wit_override=wit_path,
-        tool_args=list(tool_args),
-    )
+    with _project_directory(conf):
+        lang = conf.lang
+        base_cmd, base_args = bind_args(
+            lang,
+            conf,
+            world_override=world,
+            wit_override=wit_path,
+            tool_args=list(tool_args),
+        )
 
-    if tool_help:
-        subprocess.run(base_cmd + ["--help"], check=False)
-        return
+        if tool_help:
+            subprocess.run(base_cmd + ["--help"], check=False)
+            return
 
-    full_cmd = base_cmd + base_args
-    click.echo(f"Running: {' '.join(full_cmd)}")
-    subprocess.run(full_cmd, check=True)
-    _make_all_writable()
+        manifest = ArtifactManifest(
+            conf.project_root, conf.resolve_path(conf.state_dir)
+        )
+        before = manifest.snapshot()
+        full_cmd = base_cmd + base_args
+        click.echo(f"Running: {' '.join(full_cmd)}")
+        try:
+            subprocess.run(full_cmd, check=True)
+        finally:
+            manifest.record_created_since(before)
 
 
 @cli.command()
@@ -335,72 +313,103 @@ def build(
     except ConfigError as e:
         raise click.ClickException(str(e))
 
-    lang = conf.lang
-    resolved_world = world or conf.world
-    resolved_out = out_file or (
-        f"{resolved_world}.component.wasm" if lang == "c" else f"{resolved_world}.wasm"
-    )
+    with _project_directory(conf):
+        lang = conf.lang
+        resolved_world = world or conf.world
+        output_name = (
+            f"{resolved_world}.component.wasm"
+            if lang == "c"
+            else f"{resolved_world}.wasm"
+        )
+        resolved_out = out_file or str(conf.resolve_path(conf.dist_dir) / output_name)
 
-    if lang not in LANG_CFGS:
-        raise click.ClickException(f"Unsupported lang: {lang}")
+        if lang not in LANG_CFGS:
+            raise click.ClickException(f"Unsupported lang: {lang}")
 
-    base_cmd, base_args = build_args(
-        lang,
-        conf,
-        world_override=resolved_world,
-        wit_override=wit_path,
-        src_override=src_file,
-        out_override=resolved_out,
-        tool_args=list(tool_args),
-    )
+        base_cmd, base_args = build_args(
+            lang,
+            conf,
+            world_override=resolved_world,
+            wit_override=wit_path,
+            src_override=src_file,
+            out_override=resolved_out,
+            tool_args=list(tool_args),
+        )
 
-    if tool_help:
-        subprocess.run(base_cmd + ["--help"], check=False)
-        return
+        if tool_help:
+            subprocess.run(base_cmd + ["--help"], check=False)
+            return
 
-    if run_clean:
-        ctx.invoke(clean)
+        if run_clean:
+            ctx.invoke(clean)
 
-    full_cmd = base_cmd + base_args
-    click.echo(f"Running: {' '.join(full_cmd)}")
-    run_env = os.environ.copy()
-    if lang == "go" and "GOTOOLCHAIN" not in run_env:
-        try:
-            go_version = subprocess.check_output(["go", "version"], text=True)
-        except (FileNotFoundError, subprocess.CalledProcessError):
-            go_version = ""
-        match = re.search(r"\bgo1\.(\d+)", go_version)
-        if match and int(match.group(1)) >= 26:
-            # TinyGo 0.40.x requires the Go 1.25 toolchain for guest builds.
-            run_env["GOTOOLCHAIN"] = "go1.25.4+auto"
-            click.echo("Detected Go 1.26+, using GOTOOLCHAIN=go1.25.4+auto for TinyGo.")
-
-    subprocess.run(full_cmd, check=True, env=run_env)
-
-    if lang == "rust":
-        src_path = Path("target/wasm32-wasip1/release") / f"{resolved_world}.wasm"
-        dst = Path(".") / resolved_out
-        if src_path.exists():
-            shutil.move(str(src_path), str(dst))
-            click.echo(f"Moved {src_path} to {dst}")
-        else:
-            raise click.ClickException(f"WASM file '{src_path}' not found")
-
-    if lang == "c":
-        full_cmd = [
-            "wasm-tools",
-            "component",
-            "new",
-            f"{resolved_world}.wasm",
-            "--adapt",
-            "wasi_snapshot_preview1.wasm",
-            "-o",
-            resolved_out,
-        ]
+        manifest = ArtifactManifest(
+            conf.project_root, conf.resolve_path(conf.state_dir)
+        )
+        before = manifest.snapshot()
+        Path(resolved_out).parent.mkdir(parents=True, exist_ok=True)
+        if lang == "c":
+            (conf.resolve_path(conf.state_dir) / "build" / "c").mkdir(
+                parents=True, exist_ok=True
+            )
+        full_cmd = base_cmd + base_args
         click.echo(f"Running: {' '.join(full_cmd)}")
-        subprocess.run(full_cmd, check=True)
+        run_env = os.environ.copy()
+        if lang == "go" and "GOTOOLCHAIN" not in run_env:
+            try:
+                go_version = subprocess.check_output(["go", "version"], text=True)
+            except (FileNotFoundError, subprocess.CalledProcessError):
+                go_version = ""
+            match = re.search(r"\bgo1\.(\d+)", go_version)
+            if match and int(match.group(1)) >= 26:
+                # TinyGo 0.40.x requires the Go 1.25 toolchain for guest builds.
+                run_env["GOTOOLCHAIN"] = "go1.25.4+auto"
+                click.echo(
+                    "Detected Go 1.26+, using GOTOOLCHAIN=go1.25.4+auto for TinyGo."
+                )
+        if lang == "rust":
+            run_env["CARGO_TARGET_DIR"] = str(
+                conf.resolve_path(conf.state_dir) / "build" / "rust"
+            )
 
-    _make_all_writable()
+        try:
+            subprocess.run(full_cmd, check=True, env=run_env)
+
+            if lang == "rust":
+                src_path = (
+                    Path(run_env["CARGO_TARGET_DIR"])
+                    / "wasm32-wasip1"
+                    / "release"
+                    / f"{resolved_world}.wasm"
+                )
+                dst = Path(resolved_out)
+                if src_path.exists():
+                    shutil.move(str(src_path), str(dst))
+                    click.echo(f"Moved {src_path} to {dst}")
+                else:
+                    raise click.ClickException(f"WASM file '{src_path}' not found")
+
+            if lang == "c":
+                intermediate = (
+                    conf.resolve_path(conf.state_dir)
+                    / "build"
+                    / "c"
+                    / f"{resolved_world}.wasm"
+                )
+                full_cmd = [
+                    "wasm-tools",
+                    "component",
+                    "new",
+                    str(intermediate),
+                    "--adapt",
+                    str(conf.project_root / "wasi_snapshot_preview1.wasm"),
+                    "-o",
+                    resolved_out,
+                ]
+                click.echo(f"Running: {' '.join(full_cmd)}")
+                subprocess.run(full_cmd, check=True)
+        finally:
+            manifest.record_created_since(before)
 
 
 @cli.command(
@@ -431,7 +440,9 @@ def all(ctx: click.Context) -> None:
     ctx.invoke(bind)
     ctx.invoke(build)
     conf = Config.load()
-    click.echo(f"{conf.world}.wasm is ready")
+    suffix = ".component.wasm" if conf.lang == "c" else ".wasm"
+    output = conf.resolve_path(conf.dist_dir) / f"{conf.world}{suffix}"
+    click.echo(f"{output} is ready")
 
 
 if __name__ == "__main__":

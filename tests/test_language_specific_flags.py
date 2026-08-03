@@ -82,5 +82,7 @@ def test_build_accepts_language_specific_flags(tmp_path, mode, lang):
     run_cli(work_dir, "bind", mode=mode)
     run_cli(work_dir, "build", "--", *BUILD_TOOL_FLAGS[lang], mode=mode)
 
-    wasm_file = work_dir / ("adder.component.wasm" if lang == "c" else "adder.wasm")
+    wasm_file = (
+        work_dir / "dist" / ("adder.component.wasm" if lang == "c" else "adder.wasm")
+    )
     assert wasm_file.exists()
