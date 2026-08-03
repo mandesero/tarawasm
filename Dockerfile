@@ -9,7 +9,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-dev build-essential \
-    curl wget git ca-certificates gnupg \
+    curl wget git ca-certificates gnupg util-linux \
     patchelf \
     golang-go \
     llvm clang lld cmake \
@@ -22,9 +22,11 @@ RUN rm -rf /usr/local/go && \
     rm go.tar.gz
 ENV PATH="/usr/local/go/bin:${PATH}"
 
-# Install Rust
+# Install Rust in a location available to the runtime UID selected by the entrypoint.
+ENV RUSTUP_HOME=/opt/rustup
+ENV CARGO_HOME=/opt/cargo
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
 
 # Install TinyGo
 RUN curl -L https://github.com/tinygo-org/tinygo/releases/download/v0.40.1/tinygo_0.40.1_amd64.deb -o tinygo.deb && \
@@ -36,6 +38,7 @@ RUN cargo install --locked wkg --version 0.15.0 && \
     cargo install --locked wasm-tools --version 1.245.1 && \
     cargo install --locked cargo-component --version 0.21.1 && \
     cargo install --locked wit-bindgen-cli --version 0.53.1
+RUN rustup target add wasm32-wasip1
 
 # Node.js 24.x (LTS)
 RUN apt-get remove -y nodejs npm libnode-dev || true && \

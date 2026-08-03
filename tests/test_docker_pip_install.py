@@ -68,10 +68,11 @@ def test_docker_pip_install_unblocks_python_build(tmp_path, mode):
         (exc_info.value.stderr or "") + (exc_info.value.stdout or "")
     )
 
-    run_cli(work_dir, "pip", "install", "./localdep", mode=mode)
+    (work_dir / "requirements.txt").write_text("./localdep\n")
+    run_cli(work_dir, "pip", "install", "-r", "requirements.txt", mode=mode)
     run_cli(work_dir, "build", mode=mode)
 
-    assert (work_dir / "adder.wasm").exists()
+    assert (work_dir / "dist" / "adder.wasm").exists()
     assert (
         work_dir
         / ".tarawasm"
@@ -79,3 +80,87 @@ def test_docker_pip_install_unblocks_python_build(tmp_path, mode):
         / "tarawasm_test_helper"
         / "__init__.py"
     ).exists()
+
+    package_info = run_tool(
+        work_dir,
+        "pip",
+        "show",
+        "tarawasm-test-helper",
+        mode=mode,
+        capture_output=True,
+        text=True,
+    )
+    assert "Location: /work/.tarawasm/site-packages" in package_info.stdout
+    dependency_check = run_tool(
+        work_dir,
+        "pip",
+        "check",
+        mode=mode,
+        capture_output=True,
+        text=True,
+    )
+    assert "No broken requirements found" in dependency_check.stdout
+
+    run_cli(work_dir, "clean", mode=mode)
+    assert not (work_dir / "dist" / "adder.wasm").exists()
+    assert (
+        work_dir
+        / ".tarawasm"
+        / "site-packages"
+        / "tarawasm_test_helper"
+        / "__init__.py"
+    ).exists()
+
+    # A fresh container can build with the same persisted dependencies.
+    run_cli(work_dir, "build", mode=mode)
+    assert (work_dir / "dist" / "adder.wasm").exists()
+
+    run_cli(
+        work_dir,
+        "pip",
+        "uninstall",
+        "--yes",
+        "tarawasm-test-helper",
+        mode=mode,
+    )
+    assert not (
+        work_dir
+        / ".tarawasm"
+        / "site-packages"
+        / "tarawasm_test_helper"
+        / "__init__.py"
+    ).exists()
+    with pytest.raises(subprocess.CalledProcessError):
+        run_tool(
+            work_dir,
+            "pip",
+            "show",
+            "tarawasm-test-helper",
+            mode=mode,
+            capture_output=True,
+            text=True,
+        )
+
+
+@pytest.mark.parametrize("mode", ["docker"], ids=lambda m: f"cli:{m}")
+def test_docker_pip_rejects_install_location_overrides(tmp_path, mode):
+    if not cli_mode_available(mode):
+        pytest.skip(f"CLI mode '{mode}' not available in this environment")
+
+    _create_local_python_package(tmp_path)
+    with pytest.raises(subprocess.CalledProcessError) as exc_info:
+        run_tool(
+            tmp_path,
+            "pip",
+            "install",
+            "--target",
+            "elsewhere",
+            "./localdep",
+            mode=mode,
+            capture_output=True,
+            text=True,
+        )
+
+    output = (exc_info.value.stderr or "") + (exc_info.value.stdout or "")
+    assert "pip install location is managed" in output
+    assert not (tmp_path / "elsewhere").exists()

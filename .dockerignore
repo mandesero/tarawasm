@@ -1,0 +1,12 @@
+.git
+.venv
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.tarawasm
+build
+dist
+target
+tarawasm.egg-info
+**/__pycache__
+**/*.pyc
