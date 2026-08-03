@@ -15,12 +15,7 @@ import click
 from tarawasm.artifacts import ArtifactManifest
 from tarawasm.backends import BackendError, backend_names, get_backend
 from tarawasm.backends.base import Command
-from tarawasm.config import (
-    CONFIG_FILE,
-    IMPORTED_WIT_DIR,
-    Config,
-    ConfigError,
-)
+from tarawasm.config import CONFIG_FILE, IMPORTED_WIT_DIR, Config, ConfigError
 from tarawasm.wit import WitError, WitParser
 
 

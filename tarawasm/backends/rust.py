@@ -72,7 +72,7 @@ class RustBackend(LanguageBackend):
                 f'{package.split(":", 1)[1]}" }}\n'
                 for package in packages
             )
-        files[Path("Cargo.toml")] = f"""[package]
+        cargo_toml = f"""[package]
 name = "{crate_name}"
 version = "0.1.0"
 edition = "2021"
@@ -93,6 +93,7 @@ world = "{world.name}"
 [package.metadata.component.target.dependencies]
 {dependency_lines}
 """
+        files[Path("Cargo.toml")] = cargo_toml
         return files
 
     def generate_source(self, world):
