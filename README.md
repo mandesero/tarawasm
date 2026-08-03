@@ -1,15 +1,33 @@
 # tarawasm
 
-`tarawasm` builds WebAssembly components from a WIT contract with the same
-workflow for Python, Go, JavaScript, Rust, and C/C++.
+[![Build](https://github.com/mandesero/tarawasm/actions/workflows/build.yaml/badge.svg)](https://github.com/mandesero/tarawasm/actions/workflows/build.yaml)
+[![Lint](https://github.com/mandesero/tarawasm/actions/workflows/lint.yaml/badge.svg)](https://github.com/mandesero/tarawasm/actions/workflows/lint.yaml)
+[![Docker](https://github.com/mandesero/tarawasm/actions/workflows/docker.yaml/badge.svg)](https://github.com/mandesero/tarawasm/actions/workflows/docker.yaml)
 
-> This is a breaking WIT-first release. Projects created by older releases are
-> not migrated. Reinitialize them with `tarawasm init` from their WIT package or
-> with `tarawasm import` from an existing component.
+`tarawasm` turns a [WIT](https://component-model.bytecodealliance.org/design/wit.html)
+contract into a WebAssembly component. Python, Go, JavaScript, Rust, and C/C++
+projects all use the same three commands:
 
-## Quick start
+```console
+tarawasm init --lang python --wit ./wit --world calculator .
+tarawasm bind
+tarawasm build
+```
 
-Create a WIT package:
+The result is a validated Component Model binary at `dist/calculator.wasm`.
+
+## Start in five minutes with Docker
+
+Docker contains every compiler and binding generator. Define this helper in the
+directory where you want to create a project:
+
+```bash
+tarawasm() {
+  docker run --rm -v "$PWD:/work" -w /work mandeser0/tarawasm:latest "$@"
+}
+```
+
+Create `wit/calculator.wit`:
 
 ```wit
 package example:calculator@0.1.0;
@@ -19,7 +37,7 @@ world calculator {
 }
 ```
 
-Initialize, generate bindings, and build:
+Then initialize and build the component:
 
 ```console
 tarawasm init --lang python --wit ./wit --world calculator .
@@ -27,38 +45,54 @@ tarawasm bind
 tarawasm build
 ```
 
-The final, validated Component Model binary is always written to
-`dist/calculator.wasm`. Replace `python` with `go`, `js`, `rust`, or `c` to use
-another backend:
+Tarawasm generates a starter source file from the selected world's exports.
+Implement the generated functions, then run `tarawasm build` again.
+
+## Supported languages
+
+| Language | `--lang` | Starter source | Binding and build tools |
+| --- | --- | --- | --- |
+| Python | `python` | `main.py` | `componentize-py` |
+| Go | `go` | `main.go` | `wit-bindgen-go`, TinyGo |
+| JavaScript | `js` | `main.js` | `jco`, `componentize-js` |
+| Rust | `rust` | `src/lib.rs` | `cargo-component` |
+| C/C++ | `c` | `component.c` | `wit-bindgen`, WASI SDK, `wasm-tools` |
+
+TinyGo's `wasip2` target requires the selected Go world to import the complete
+versioned `wasi:cli/imports@0.2.x` world. Tarawasm checks the required WASI
+interfaces before invoking TinyGo and reports every missing import.
+
+Ready-to-build projects for every language live in [`examples`](examples).
+The examples guide shows both how to run a checked-in project and how to create
+a fresh project from its WIT contract.
+
+## Initialize from WIT
 
 ```console
-tarawasm init --lang go     --wit ./wit --world calculator ./go-component
-tarawasm init --lang js     --wit ./wit --world calculator ./js-component
-tarawasm init --lang rust   --wit ./wit --world calculator ./rust-component
-tarawasm init --lang c      --wit ./wit --world calculator ./c-component
+tarawasm init \
+    --lang <python|go|js|rust|c> \
+    --wit <file-or-directory> \
+    [--world <world>] \
+    [project-directory]
 ```
 
-TinyGo's `wasip2` target requires the selected Go world to include the complete
-versioned `wasi:cli/imports@0.2.x` imports world. Tarawasm validates all required
-WASI interfaces before invoking TinyGo and lists every missing import instead
-of creating a hidden wrapper world.
+`--wit` accepts one `.wit` file or a WIT package directory. If the package has
+one world, tarawasm selects it automatically. If it has several, tarawasm lists
+them and asks for `--world`.
 
-`--wit` accepts either one `.wit` file or a WIT package directory. If the
-package defines exactly one world, `--world` is optional. With multiple worlds,
-tarawasm lists them and requires an explicit choice.
-
-Initialization validates the complete WIT resolution graph before writing. It
-does not overwrite an existing source file. `--force` is limited to known
-generated project files and never removes unrelated paths. To inspect an init
-without changing the filesystem:
+Initialization validates the complete WIT resolution graph before writing any
+files. It does not overwrite an existing source file. `--force` may replace
+known generated files, but never removes unrelated paths. Preview an operation
+without changing the filesystem with `--dry-run`:
 
 ```console
-tarawasm init --lang python --wit ./wit --dry-run ./component
+tarawasm init --lang rust --wit ./wit --dry-run ./calculator
 ```
 
 ## Import an existing component
 
-Import is a separate first-class workflow:
+Use `import` when the starting point is a Component Model binary rather than a
+WIT package:
 
 ```console
 tarawasm import \
@@ -68,17 +102,48 @@ tarawasm import \
     ./service-project
 ```
 
-The input must be a WebAssembly Component Model binary; core modules are
-rejected. WIT is extracted into `.tarawasm/imported-wit` and then handled by the
-same parser, world selection, and source generator as WIT-first init. The input
-component is neither modified nor registered as a generated artifact, so
-`tarawasm clean` never removes it.
+Core WebAssembly modules are rejected. The input component is left untouched;
+its WIT is extracted to `.tarawasm/imported-wit` and passed through the same
+world selection and source generation pipeline as `init`. Because the input is
+not a generated artifact, `tarawasm clean` never removes it.
 
-There is no `init --wasm-file` compatibility option.
+## Build workflow
 
-## Configuration
+```console
+tarawasm bind [--world WORLD] [--wit PATH] [--dry-run] [-- TOOL_ARGS...]
+tarawasm build [--world WORLD] [--wit PATH] [--src PATH] [--out PATH] \
+    [--clean] [--dry-run] [-- TOOL_ARGS...]
+tarawasm all
+tarawasm clean
+tarawasm strip component.wasm [wasm-tools strip options]
+```
 
-The config has one strict current form:
+`tarawasm all` runs binding generation and the build together. `--tool-help`
+shows help for the selected backend tool. Arguments after `--` are passed
+directly to that tool as an argument list.
+
+The default output is `dist/<world>.wasm`. A custom `--out`, including a path
+outside the project, is published atomically and recorded for safe cleanup. A
+failed build keeps the previous successful component intact.
+
+## WIT dependencies
+
+Dependency resolution uses Bytecode Alliance `wkg` and a `wkg.lock` file:
+
+```console
+tarawasm deps resolve  # create the lock or fetch its pinned packages
+tarawasm deps list
+tarawasm deps update   # explicitly update dependency versions
+```
+
+Resolved packages remain separate under the WIT package's `deps/` directory.
+The project-local cache is `.tarawasm/deps/cache`. Regular `bind` and `build`
+commands do not update the lock file. Once the lock and cache are populated,
+resolution can reuse the pinned packages offline.
+
+## Configuration and project layout
+
+`tarawasm init` and `tarawasm import` create a strict `tarawasm.json`:
 
 ```json
 {
@@ -93,76 +158,70 @@ The config has one strict current form:
 }
 ```
 
-There is no schema/version field, compatibility layer, or automatic migration.
-Legacy and unknown fields are rejected. Paths are resolved relative to the
-project root containing `tarawasm.json`; commands may be run from any child
-directory.
-
-## Commands and overrides
-
-```console
-tarawasm bind [--world WORLD] [--wit PATH] [--dry-run] [-- TOOL_ARGS...]
-tarawasm build [--world WORLD] [--wit PATH] [--src PATH] [--out PATH] \
-    [--clean] [--dry-run] [-- TOOL_ARGS...]
-tarawasm all
-tarawasm clean
-tarawasm strip component.wasm [wasm-tools strip options]
-```
-
-`--tool-help` displays the selected backend tool's help. Arguments following
-`--` are passed as an argv list directly to that tool. A custom `--out`,
-including a path outside the project, is published atomically and recorded for
-safe cleanup. A failed build leaves the previous successful output untouched.
-
-## WIT dependencies
-
-Dependency resolution uses Bytecode Alliance `wkg` and its `wkg.lock` file:
-
-```console
-tarawasm deps resolve  # create the initial lock or fetch locked packages
-tarawasm deps list
-tarawasm deps update   # explicitly change locked versions
-```
-
-Resolved packages remain separate under the WIT package's `deps/` directory;
-they are not flattened into the main WIT file. The project-local download cache
-is `.tarawasm/deps/cache`. Normal `bind` and `build` never update the lock file.
-With the lock and cache populated, `deps resolve` can reuse the pinned packages
-without changing versions.
-
-## Project layout
+Paths are relative to the project root containing `tarawasm.json`, so commands
+work from any child directory. Unknown fields are rejected with a field-specific
+error.
 
 ```text
-component/
+calculator/
 ├── tarawasm.json
 ├── wit/                         # source WIT package
-├── main.py                      # backend-specific starter source
+├── main.py                      # backend-specific implementation
 ├── .tarawasm/
 │   ├── artifacts.json           # generated artifact manifest
-│   ├── build/<language>/         # intermediate build files
-│   ├── deps/cache/               # dependency cache
-│   └── imported-wit/             # only for `tarawasm import`
+│   ├── build/<language>/        # intermediate build files
+│   ├── deps/cache/              # dependency cache
+│   └── imported-wit/            # WIT extracted by `import`
 └── dist/
-    └── <world>.wasm              # the only final component
+    └── calculator.wasm          # final component
 ```
 
-Language-specific binding and target directories are generated artifacts.
-`tarawasm clean` removes only paths recorded in `.tarawasm/artifacts.json`; it
-does not scan for `*.wasm` and does not delete user `target/`, `internal/`, or
-other pre-existing files.
+`tarawasm clean` removes only paths registered in
+`.tarawasm/artifacts.json`. It does not scan for `*.wasm`, and it leaves user
+directories such as `target/` and `internal/` untouched.
 
-## Docker and Python dependencies
+## Install Python packages in Docker
 
-The image maps generated files to the bind-mounted project's UID/GID instead of
-making the project world-writable. Python packages can be installed into the
-project without rebuilding the image:
+Python component dependencies can persist in the mounted project without
+rebuilding the image:
 
 ```console
-docker run --rm -v "$PWD:/work" -w /work mandeser0/tarawasm:latest \
-    pip install -r requirements.txt
-docker run --rm -v "$PWD:/work" -w /work mandeser0/tarawasm:latest build
+tarawasm pip install -r requirements.txt
+tarawasm build
 ```
 
-Packages persist in `.tarawasm/site-packages` and are reused by
-`componentize-py`. Set `TARAWASM_PY_SITE_PACKAGES` consistently on install and
-build to choose another location.
+Packages are stored in `.tarawasm/site-packages` and reused by
+`componentize-py`. Set `TARAWASM_PY_SITE_PACKAGES` to the same custom path for
+both install and build if the default is unsuitable.
+
+## Native development and helper scripts
+
+The native installer targets x86-64 Ubuntu and installs the pinned compilers,
+SDKs, and Python packages system-wide:
+
+```console
+sudo make install
+make check
+python3 -m tarawasm.cli --help
+```
+
+Build a standalone executable with Nuitka:
+
+```console
+make build
+./target/tarawasm --help
+```
+
+Useful repository helpers are exposed as Make targets:
+
+| Command | Purpose |
+| --- | --- |
+| `make install` | Run `scripts/install_deps.sh` and install the pinned toolchain |
+| `make check` | Run system-version and SDK/Python dependency checks |
+| `make shellcheck` | Check every tracked shell script |
+| `make build` | Create the standalone `target/tarawasm` executable |
+| `make test-docker-amd64` | Build the image and run the Docker integration suite |
+| `make test-upstream-amd64` | Run integration tests against upstream tool repositories |
+
+For day-to-day use, Docker is the shortest path because it already contains
+the exact supported toolchain versions.

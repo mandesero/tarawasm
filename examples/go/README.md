@@ -1,10 +1,25 @@
 # Go example
 
+This example contains the full versioned WASI imports required by TinyGo's
+`wasip2` target. Work on a copy:
+
 ```console
-tarawasm init --lang go --wit ./wit --world adder .
+cp -R examples/go /tmp/tarawasm-go
+cd /tmp/tarawasm-go
 tarawasm bind
 tarawasm build
 ```
 
-The final component is `dist/adder.wasm`. `docs:adder@0.1.0.wasm` is retained
-only as a fixture for the separate `tarawasm import` workflow.
+The WIT contract is in `wit/adder.wit`, the implementation is `main.go`, and
+the final component is `dist/adder.wasm`.
+
+To create a fresh Go project from the same contract:
+
+```console
+mkdir -p /tmp/tarawasm-go-new
+cp -R examples/go/wit /tmp/tarawasm-go-new/wit
+cd /tmp/tarawasm-go-new
+tarawasm init --lang go --wit ./wit --world adder .
+tarawasm bind
+tarawasm build
+```

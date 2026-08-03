@@ -1,10 +1,24 @@
 # JavaScript example
 
+Run the checked-in JavaScript project from a disposable copy:
+
 ```console
-tarawasm init --lang js --wit ./wit --world adder .
+cp -R examples/js /tmp/tarawasm-js
+cd /tmp/tarawasm-js
 tarawasm bind
 tarawasm build
 ```
 
-The final component is `dist/adder.wasm`. `docs:adder@0.1.0.wasm` is retained
-only as a fixture for the separate `tarawasm import` workflow.
+The WIT contract is in `wit/adder.wit`, the implementation is `main.js`, and
+the final component is `dist/adder.wasm`.
+
+To create a fresh project and regenerate its starter source:
+
+```console
+mkdir -p /tmp/tarawasm-js-new
+cp -R examples/js/wit /tmp/tarawasm-js-new/wit
+cd /tmp/tarawasm-js-new
+tarawasm init --lang js --wit ./wit --world adder .
+tarawasm bind
+tarawasm build
+```
