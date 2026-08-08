@@ -6,6 +6,8 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-08
+
 ### Added
 
 - WIT-first `init`, `import`, `bind`, `build`, dependency management, and
@@ -13,6 +15,7 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Managed project layouts, atomic output publication, recorded artifacts, dry
   runs, and safe cleanup.
 - Support for world-level WIT type declarations.
+- The BSD-2-Clause license, contribution guide, and release changelog.
 
 ### Changed
 
@@ -62,6 +65,7 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Refactored CLI configuration and build/test integration for the first stable
   release.
 
-[Unreleased]: https://github.com/mandesero/tarawasm/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/mandesero/tarawasm/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/mandesero/tarawasm/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mandesero/tarawasm/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mandesero/tarawasm/releases/tag/v0.1.0
