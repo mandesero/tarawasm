@@ -14,16 +14,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Install system dependencies
+      - name: Install Python dependencies
+        run: python3 -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Prepare local language toolchains
         run: |
-          sudo make install
-          echo "PATH=/usr/local/go/bin:/opt/wasi-sdk/bin:/usr/bin:${PATH}" >> $GITHUB_ENV
-          echo "GOROOT=/usr/local/go" >> $GITHUB_ENV
+          python3 -m tarawasm.cli toolchain setup --all --mode local --install --yes --upgrade
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          from tarawasm.toolchains.discovery import managed_environment
+          env = managed_environment()
+          for key in ("PATH", "CARGO_HOME", "RUSTUP_HOME", "WASI_SDK_PATH"):
+              if key in env:
+                  print(f"{key}={env[key]}")
+          PY
 
       - name: Debug Toolchain in PATH
         run: |
           echo "$PATH"
-          ls -l /opt/wasi-sdk/bin/clang
+          ls -l "$WASI_SDK_PATH/bin/clang"
           which go
           go version
           which node
@@ -43,21 +51,39 @@ jobs:
       - name: Verify SDK & Python deps
         run: make sdk-check
 
-      - name: Install development dependencies
-        run: pip install -r requirements-dev.txt
-
       - name: Install Wasmtime
         run: |
-          curl https://wasmtime.dev/install.sh -sSf | bash
+          version=$(python3 -c 'from tarawasm.toolchains.catalog import CATALOG; print(CATALOG["packages"]["wasmtime"])')
+          curl https://wasmtime.dev/install.sh -sSf | bash -s -- --version "v$version"
           echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
 
-      - name: Build CLI binary
-        run: |
-          make build
-          echo "${{ github.workspace }}/target" >> $GITHUB_PATH
-
-      - name: Run non-docker pytest tests (python and standalone modes)
+      - name: Run non-docker pytest tests (Python CLI)
         env:
           WASM_RUNTIME: wasmtime
           PYTHONPATH: ${{ github.workspace }}
+          TARAWASM_LOCAL_TOOLCHAIN_IT: "1"
         run: python3 -m pytest -k "not cli:docker" -vv
+
+  platform-installers:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [debian-bookworm, fedora-39, centos-8, redos-7.3, astra-1.7]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Prepare isolated Python for legacy distributions
+        run: |
+          curl -fL 'https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.13.16+20261003-x86_64-unknown-linux-gnu-install_only.tar.gz' -o python.tar.gz
+          echo '0a0272910b10417c659a9312fb3f2d7a6d774da7bd510999be7a3ba83273dc1f  python.tar.gz' | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/platform-python"
+          tar -C "$RUNNER_TEMP/platform-python" -xzf python.tar.gz
+          echo "TARAWASM_PLATFORM_PYTHON_ROOT=$RUNNER_TEMP/platform-python/python" >> "$GITHUB_ENV"
+          python3 -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Check native release installation and ABI
+        env:
+          TARAWASM_PLATFORM_TOOLCHAIN_IT: "1"
+        run: python3 -m pytest 'tests/test_toolchain_platforms.py::test_linux_distribution_installs_managed_releases[${{ matrix.platform }}]' -vv -ra
