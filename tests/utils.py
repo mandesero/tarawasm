@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 RUNTIME = os.environ.get("WASM_RUNTIME", "wasmtime")
-CLI_MODES = ["python", "docker", "standalone"]
+CLI_MODES = ["python", "docker"]
 _BASE_DOCKER_IMAGE = "mandeser0/tarawasm:latest"
 
 
@@ -34,8 +34,6 @@ def cli_mode_available(mode):
     elif mode == "docker":
         docker_image = os.environ.get("TARAWASM_DOCKER_IMAGE", _BASE_DOCKER_IMAGE)
         return shutil.which("docker") and docker_image in _get_docker_images()
-    elif mode == "standalone":
-        return shutil.which("tarawasm") is not None
     else:
         return False
 
@@ -69,14 +67,8 @@ def run_cli(tmpdir, *args, mode="python"):
         if not cli_mode_available("docker"):
             raise RuntimeError(f"Docker image '{docker_image}' not found locally.")
         cmd = _docker_run_prefix(workdir) + [docker_image, *args]
-    elif mode == "standalone":
-        if not cli_mode_available("standalone"):
-            raise RuntimeError("Standalone binary 'tarawasm' not found in PATH.")
-        cmd = ["tarawasm", *args]
     else:
-        raise ValueError(
-            f"Unsupported mode '{mode}'. Allowed: python, docker, standalone."
-        )
+        raise ValueError(f"Unsupported mode '{mode}'. Allowed: python, docker.")
 
     subprocess.run(cmd, check=True, cwd=tmpdir, env=env)
 

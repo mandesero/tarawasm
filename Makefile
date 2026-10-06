@@ -1,4 +1,4 @@
-.PHONY: install system-check sdk-check check build shellcheck test-docker-amd64 test-upstream-amd64
+.PHONY: install system-check sdk-check check shellcheck test-docker-amd64 test-upstream-amd64
 
 SHELLCHECK_FILES = $(shell find docker-scripts scripts -type f -name '*.sh' -print | sort)
 
@@ -15,9 +15,6 @@ sdk-check:
 
 check: system-check sdk-check
 	@echo "All checks passed!"
-
-build:
-	@./scripts/build.sh
 
 shellcheck:
 	@shellcheck $(SHELLCHECK_FILES)
