@@ -90,7 +90,9 @@ class WitParser:
     """Structured adapter for `wasm-tools component wit --json`."""
 
     def __init__(self, executable: str = "wasm-tools") -> None:
-        self.executable = executable
+        from tarawasm.toolchains.runtime import executable as selected_executable
+
+        self.executable = selected_executable(executable)
 
     def parse(self, path: Path | str) -> WitDocument:
         source = Path(path).expanduser().resolve()

@@ -4,3 +4,4 @@ isort
 pre-commit
 mypy
 pytest
+componentize-py>=0.21.0

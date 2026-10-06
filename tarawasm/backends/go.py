@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tarawasm.toolchains.catalog import CATALOG
 from tarawasm.wit import WitFunction, WitType
 
 from .base import BackendError, Command, LanguageBackend, pascal, snake
@@ -232,10 +233,17 @@ class GoBackend(LanguageBackend):
                     "go",
                     "get",
                     "-tool",
-                    "go.bytecodealliance.org/cmd/wit-bindgen-go@v0.7.0",
+                    "go.bytecodealliance.org/cmd/wit-bindgen-go@v"
+                    + CATALOG["packages"]["wit-bindgen-go"],
                 )
             ),
-            Command(("go", "get", "go.bytecodealliance.org@v0.7.0")),
+            Command(
+                (
+                    "go",
+                    "get",
+                    "go.bytecodealliance.org@v" + CATALOG["packages"]["wit-bindgen-go"],
+                )
+            ),
             self.bind_command(conf, world=world, wit=wit, tool_args=tool_args),
         )
 
@@ -254,7 +262,7 @@ class GoBackend(LanguageBackend):
                 *tool_args,
                 str(source),
             ),
-            {"GOTOOLCHAIN": "go1.25.6+auto"},
+            {"GOTOOLCHAIN": "local"},
         )
 
     def generated_artifacts(self, conf):
