@@ -16,6 +16,8 @@ from tarawasm.artifacts import ArtifactManifest
 from tarawasm.backends import BackendError, backend_names, get_backend
 from tarawasm.backends.base import Command
 from tarawasm.config import CONFIG_FILE, IMPORTED_WIT_DIR, Config, ConfigError
+from tarawasm.toolchains.cli import doctor, toolchain
+from tarawasm.toolchains.runtime import command_argv, executable, execution_options
 from tarawasm.wit import WitError, WitParser
 
 
@@ -29,6 +31,23 @@ def _project_directory(conf: Config):
         os.chdir(previous)
 
 
+def _publish_component(source: Path, destination: Path) -> None:
+    # Stage on the destination filesystem: Docker bind mounts and native output
+    # paths may be separate devices. Only the final replacement publishes bytes.
+    fd, rendered = tempfile.mkstemp(
+        prefix=f".{destination.name}.", dir=destination.parent
+    )
+    os.close(fd)
+    staged = Path(rendered)
+    try:
+        shutil.copyfile(source, staged)
+        shutil.copymode(source, staged)
+        os.replace(staged, destination)
+    finally:
+        staged.unlink(missing_ok=True)
+    source.unlink(missing_ok=True)
+
+
 def _fail(error: Exception) -> click.ClickException:
     return click.ClickException(str(error))
 
@@ -40,7 +59,11 @@ def _run(command: Command, *, dry_run: bool = False, check: bool = True) -> None
     environment = os.environ.copy()
     environment.update(command.env)
     try:
-        subprocess.run(command.argv, check=check, env=environment)
+        subprocess.run(
+            command_argv(command.argv),
+            check=check,
+            env=environment,
+        )
     except FileNotFoundError as exc:
         raise click.ClickException(
             f"Required tool '{command.argv[0]}' was not found."
@@ -147,8 +170,13 @@ def _install_project_files(
 
 
 @click.group()
-def cli() -> None:
+@click.option("--non-interactive", is_flag=True, help="Never prompt for setup.")
+def cli(non_interactive: bool = False) -> None:
     """Build WebAssembly components from WIT contracts."""
+
+
+cli.add_command(toolchain)
+cli.add_command(doctor)
 
 
 @cli.command()
@@ -168,6 +196,7 @@ def cli() -> None:
     "--dry-run", is_flag=True, help="Validate and show files without writing."
 )
 @click.argument("project_dir", type=click.Path(path_type=Path), default=Path("."))
+@execution_options
 def init(
     language: str,
     wit_path: Path,
@@ -237,6 +266,7 @@ def init(
     "--dry-run", is_flag=True, help="Validate and show files without writing."
 )
 @click.argument("project_dir", type=click.Path(path_type=Path), default=Path("."))
+@execution_options
 def import_component(
     language: str,
     component: Path,
@@ -252,7 +282,7 @@ def import_component(
         try:
             result = subprocess.run(
                 (
-                    "wasm-tools",
+                    executable("wasm-tools"),
                     "component",
                     "wit",
                     str(component.resolve()),
@@ -343,7 +373,15 @@ def deps() -> None:
 def _dependency_paths(conf: Config) -> tuple[Path, Path, Path]:
     wit = conf.resolve_path(conf.wit_path)
     wit_dir = wit if wit.is_dir() else wit.parent
-    return wit_dir, wit_dir / "wkg.lock", conf.state_dir / "deps/cache"
+    root_lock = conf.project_root / "wkg.lock"
+    legacy_lock = wit_dir / "wkg.lock"
+    lock = (
+        legacy_lock
+        if legacy_lock != root_lock
+        and (legacy_lock.exists() or legacy_lock.is_symlink())
+        else root_lock
+    )
+    return wit_dir, lock, conf.state_dir / "deps/cache"
 
 
 def _run_dependency_command(action: str, *, dry_run: bool) -> None:
@@ -352,35 +390,67 @@ def _run_dependency_command(action: str, *, dry_run: bool) -> None:
     except ConfigError as exc:
         raise _fail(exc)
     wit_dir, lock, cache = _dependency_paths(conf)
-    command = Command(
-        (
-            "wkg",
-            "wit",
-            action,
-            "--wit-dir",
-            str(wit_dir),
-            "--cache",
-            str(cache),
+    if lock != conf.project_root / "wkg.lock":
+        raise click.ClickException(
+            f"Legacy WIT lock found at {lock}. Explicitly migrate/reconcile it with {conf.project_root / 'wkg.lock'} before resolving or updating dependencies."
         )
-    )
+    # wkg 0.16.1 update ends with an upstream todo!() panic. Explicit updates
+    # use fetch with a fresh lock instead; failed commands restore the old lock.
+    command = Command(("wkg", "fetch", str(wit_dir), "--cache", str(cache)))
+    if action == "update":
+        click.echo("Explicit update: regenerate wkg.lock.")
     if dry_run:
         _run(command, dry_run=True)
         return
+    if lock.is_symlink():
+        raise click.ClickException("Refusing to replace a symlinked wkg.lock.")
     cache.mkdir(parents=True, exist_ok=True)
     previous_lock = lock.read_bytes() if lock.is_file() else None
-    _run(command)
-    if action == "fetch" and previous_lock is not None:
-        current_lock = lock.read_bytes() if lock.is_file() else None
-        if current_lock != previous_lock:
-            lock.write_bytes(previous_lock)
-            raise click.ClickException(
-                "WIT dependencies differ from wkg.lock. "
-                "Run `tarawasm deps update` to update them explicitly."
-            )
+    backup = None
+    retain_backup = False
+    if previous_lock is not None:
+        descriptor, saved = tempfile.mkstemp(
+            prefix="wkg-lock-", suffix=".backup", dir=cache
+        )
+        os.close(descriptor)
+        backup = Path(saved)
+        try:
+            shutil.copy2(lock, backup)
+        except BaseException:
+            backup.unlink(missing_ok=True)
+            raise
+    try:
+        if action == "update" and previous_lock is not None:
+            lock.unlink()
+        with _project_directory(conf):
+            _run(command)
+        if action == "fetch" and previous_lock is not None:
+            current_lock = lock.read_bytes() if lock.is_file() else None
+            if current_lock != previous_lock:
+                raise click.ClickException(
+                    "WIT dependencies differ from wkg.lock. "
+                    "Run `tarawasm deps update` to update them explicitly."
+                )
+    except BaseException:
+        if backup is not None:
+            try:
+                _publish_component(backup, lock)
+            except BaseException as exc:
+                retain_backup = True
+                raise click.ClickException(
+                    f"Cannot restore wkg.lock; recover it from {backup}: {exc}"
+                ) from exc
+        else:
+            lock.unlink(missing_ok=True)
+        raise
+    finally:
+        if backup is not None and not retain_backup:
+            backup.unlink(missing_ok=True)
 
 
 @deps.command(name="resolve")
 @click.option("--dry-run", is_flag=True)
+@execution_options
 def deps_resolve(dry_run: bool) -> None:
     """Fetch dependencies pinned by wkg.lock, or create the initial lock."""
     _run_dependency_command("fetch", dry_run=dry_run)
@@ -388,6 +458,7 @@ def deps_resolve(dry_run: bool) -> None:
 
 @deps.command(name="update")
 @click.option("--dry-run", is_flag=True)
+@execution_options
 def deps_update(dry_run: bool) -> None:
     """Explicitly update dependencies and wkg.lock."""
     _run_dependency_command("update", dry_run=dry_run)
@@ -420,6 +491,7 @@ def deps_list() -> None:
 @click.option("--tool-help", is_flag=True)
 @click.option("--dry-run", is_flag=True)
 @click.argument("tool_args", nargs=-1, type=click.UNPROCESSED)
+@execution_options
 def bind(
     world: str | None,
     wit_path: Path | None,
@@ -470,6 +542,7 @@ def bind(
 @click.option("--dry-run", is_flag=True)
 @click.argument("tool_args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
+@execution_options
 def build(
     ctx: click.Context,
     world: str | None,
@@ -553,7 +626,7 @@ def build(
                     f"Build output is not a valid WebAssembly component: {exc}"
                 ) from exc
             resolved_output.parent.mkdir(parents=True, exist_ok=True)
-            os.replace(temporary_output, resolved_output)
+            _publish_component(temporary_output, resolved_output)
             manifest.record(resolved_output)
             click.echo(f"Built {resolved_output}")
         finally:
@@ -566,6 +639,7 @@ def build(
 )
 @click.argument("wasm")
 @click.pass_context
+@execution_options
 def strip(ctx: click.Context, wasm: str) -> None:
     """Remove custom sections from a WebAssembly file."""
     output_flag_present = any(arg in ctx.args for arg in ("--output", "-o"))
@@ -579,6 +653,7 @@ def strip(ctx: click.Context, wasm: str) -> None:
 
 @cli.command(name="all")
 @click.pass_context
+@execution_options
 def all_commands(ctx: click.Context) -> None:
     """Run clean, bind, and build."""
     ctx.invoke(clean)

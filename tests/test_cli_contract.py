@@ -14,6 +14,14 @@ world calculator { export add: func(a: s32, b: s32) -> s32; }
 """
 
 
+@pytest.fixture(autouse=True)
+def direct_backend_execution(monkeypatch):
+    # These tests exercise WIT/backend publication directly. Host onboarding
+    # and environment routing are covered independently in test_toolchains.py.
+    monkeypatch.setenv("INSIDE_DOCKER", "1")
+    monkeypatch.setenv("TARAWASM_TOOLCHAIN_LANGUAGE", "all")
+
+
 def _write_project(tmp_path: Path, monkeypatch, language: str = "python") -> Config:
     wit = tmp_path / "calculator.wit"
     wit.write_text(CALCULATOR_WIT)
@@ -284,6 +292,73 @@ def test_dependency_resolve_creates_lock_without_build_side_effects(
     result = CliRunner().invoke(cli, ["deps", "resolve"])
     assert result.exit_code == 0, result.output
     assert (tmp_path / "wkg.lock").is_file()
+    updated = CliRunner().invoke(cli, ["deps", "update"])
+    assert updated.exit_code == 0, updated.output
     listed = CliRunner().invoke(cli, ["deps", "list"])
     assert listed.exit_code == 0
     assert "No locked WIT dependencies" in listed.output
+
+
+def test_dependency_lock_stays_at_project_root_for_nested_wit(tmp_path, monkeypatch):
+    _write_project(tmp_path, monkeypatch)
+    (tmp_path / "wit").mkdir()
+    (tmp_path / "calculator.wit").rename(tmp_path / "wit/calculator.wit")
+    config = json.loads((tmp_path / "tarawasm.json").read_text())
+    config["wit"]["path"] = "wit"
+    (tmp_path / "tarawasm.json").write_text(json.dumps(config))
+    result = CliRunner().invoke(cli, ["deps", "resolve"])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "wkg.lock").is_file()
+    assert not (tmp_path / "wit/wkg.lock").exists()
+    result = CliRunner().invoke(cli, ["deps", "update"])
+    assert result.exit_code == 0, result.output
+
+
+@pytest.mark.parametrize("action", ["resolve", "update"])
+def test_failed_dependency_command_restores_previous_lock(
+    tmp_path, monkeypatch, action
+):
+    import click
+
+    _write_project(tmp_path, monkeypatch)
+    lock = tmp_path / "wkg.lock"
+    lock.write_bytes(b"original lock")
+
+    def fail(command, **_kwargs):
+        assert command.argv[:2] == ("wkg", "fetch")
+        if action == "update":
+            assert not lock.exists()
+        lock.write_bytes(b"partial new lock")
+        raise click.ClickException("fetch failed")
+
+    monkeypatch.setattr("tarawasm.cli._run", fail)
+    result = CliRunner().invoke(cli, ["deps", action])
+    assert result.exit_code == 1 and "fetch failed" in result.output
+    assert lock.read_bytes() == b"original lock"
+    assert not list((tmp_path / ".tarawasm/deps/cache").glob("*.backup"))
+
+
+@pytest.mark.parametrize("action", ["resolve", "update"])
+@pytest.mark.parametrize("root_lock", [False, True])
+def test_legacy_dependency_lock_requires_explicit_migration(
+    tmp_path, monkeypatch, action, root_lock
+):
+    _write_project(tmp_path, monkeypatch)
+    (tmp_path / "wit").mkdir()
+    (tmp_path / "calculator.wit").rename(tmp_path / "wit/calculator.wit")
+    config = json.loads((tmp_path / "tarawasm.json").read_text())
+    config["wit"]["path"] = "wit"
+    (tmp_path / "tarawasm.json").write_text(json.dumps(config))
+    legacy = tmp_path / "wit/wkg.lock"
+    legacy.write_bytes(b"preserve legacy pins")
+    if root_lock:
+        (tmp_path / "wkg.lock").write_bytes(b"preserve root pins")
+    monkeypatch.setattr(
+        "tarawasm.cli._run", lambda *_args, **_kwargs: pytest.fail("must not fetch")
+    )
+    result = CliRunner().invoke(cli, ["deps", action])
+    assert result.exit_code == 1 and "Legacy WIT lock" in result.output
+    assert legacy.read_bytes() == b"preserve legacy pins"
+    assert (tmp_path / "wkg.lock").exists() == root_lock
+    if root_lock:
+        assert (tmp_path / "wkg.lock").read_bytes() == b"preserve root pins"

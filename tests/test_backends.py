@@ -82,6 +82,8 @@ def test_backend_commands_are_argv_sequences(language, model, tmp_path):
     assert isinstance(build.argv, tuple)
     assert "--example" in bind[-1].argv
     assert "--example" in build.argv
+    if language == "go":
+        assert build.env["GOTOOLCHAIN"] == "local"
 
 
 def test_go_reports_all_missing_wasip2_interfaces(model):

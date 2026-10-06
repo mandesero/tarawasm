@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "image_release": "v0.3.0-toolchains2",
+  "docker_platform": "linux/amd64",
+  "tools": {
+    "python3": {
+      "minimum": "3.10.0",
+      "recommended": "3.10.0",
+      "version_args": [
+        "--version"
+      ],
+      "kind": "system",
+      "languages": [
+        "python"
+      ]
+    },
+    "wasm-tools": {
+      "minimum": "1.245.1",
+      "recommended": "1.261.0",
+      "version_args": [
+        "--version"
+      ],
+      "kind": "cargo",
+      "package": "wasm-tools",
+      "languages": [
+        "python",
+        "go",
+        "js",
+        "rust",
+        "c"
+      ]
+    },
+    "wkg": {
+      "minimum": "0.16.1",
+      "recommended": "0.16.1",
+      "version_args": [
+        "--version"
+      ],
+      "kind": "cargo",
+      "package": "wkg",
+      "languages": [
+        "python",
+        "go",
+        "js",
+        "rust",
+        "c"
+      ]
+    },
+    "componentize-py": {
+      "minimum": "0.21.0",
+      "recommended": "0.25.1",
+      "version_args": [
+        "--version"
+      ],
+      "kind": "pip",
+      "package": "componentize-py",
+      "languages": [
+        "python"
+      ]
+    },
+    "go": {
+      "minimum": "1.25.0",
+      "maximum_exclusive": "1.28.0",
+      "recommended": "1.27.1",
+      "version_args": [
+        "version"
+      ],
+      "kind": "go",
+      "languages": [
+        "go"
+      ]
+    },
+    "tinygo": {
+      "minimum": "0.42.0",
+      "maximum_exclusive": "0.43.0",
+      "recommended": "0.42.0",
+      "version_args": [
+        "version"
+      ],
+      "kind": "tinygo",
+      "languages": [
+        "go"
+      ]
+    },
+    "rustc": {
+      "minimum": "1.93.1",
+      "recommended": "1.99.0",
+      "version_args": [
+        "--version"
+      ],
+      "kind": "rust",
+      "languages": [
+        "rust"
+      ]
+    },
+    "cargo": {
+      "minimum": "1.93.1",
+      "recommended": "1.99.0",
+      "version_args": [
+        "--version"
+      ],
+      "kind": "rust",
+      "languages": [
+        "rust"
+      ]
+    },
+    "cargo-component": {
+      "minimum": "0.21.1",
+      "recommended": "0.21.1",
+      "version_args": [
+        "--version"
+      ],
+      "kind": "cargo",
+      "package": "cargo-component",
+      "languages": [
+        "rust"
+      ]
+    },
+    "node": {
+      "minimum": "24.0.0",
+      "recommended": "24.21.0",
+      "version_args": [
+        "--version"
+      ],
+      "kind": "node",
+      "languages": [
+        "js"
+      ]
+    },
+    "jco": {
+      "minimum": "1.37.0",
+      "recommended": "1.37.0",
+      "version_args": [
+        "--version"
+      ],
+      "kind": "npm",
+      "package": "@bytecodealliance/jco",
+      "languages": [
+        "js"
+      ]
+    },
+    "clang": {
+      "minimum": "19.1.5",
+      "recommended": "23.1.0",
+      "version_args": [
+        "--version"
+      ],
+      "kind": "wasi-sdk",
+      "languages": [
+        "c"
+      ],
+      "install_version": "34.0"
+    },
+    "wit-bindgen": {
+      "minimum": "0.53.1",
+      "recommended": "0.62.0",
+      "version_args": [
+        "--version"
+      ],
+      "kind": "cargo",
+      "package": "wit-bindgen-cli",
+      "languages": [
+        "c"
+      ]
+    },
+    "componentize-js": {
+      "minimum": "0.23.0",
+      "recommended": "0.23.0",
+      "version_args": [],
+      "kind": "npm-package",
+      "package": "@bytecodealliance/componentize-js",
+      "languages": [
+        "js"
+      ]
+    },
+    "preview2-shim": {
+      "minimum": "0.17.8",
+      "maximum_exclusive": "0.18.0",
+      "recommended": "0.17.8",
+      "version_args": [],
+      "kind": "npm-package",
+      "package": "@bytecodealliance/preview2-shim",
+      "languages": [
+        "js"
+      ]
+    }
+  },
+  "packages": {
+    "componentize-js": "0.23.0",
+    "preview2-shim": "0.17.8",
+    "wit-bindgen-go": "0.7.0",
+    "click": "8.5.0",
+    "wasmtime": "49.0.2",
+    "binaryen": "116"
+  }
+}
