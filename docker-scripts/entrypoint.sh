@@ -1,6 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
+# Host-side execution can use an arbitrary working directory rather than /work.
+# Give unprivileged compiler tools a writable home without mounting host homes.
+if [ "${HOME:-}" = "/tmp/tarawasm-home" ]; then
+    mkdir -p "$HOME"
+    export CARGO_HOME="$HOME/.cargo"
+fi
+
 # Match the bind-mounted project owner instead of creating root-owned output and
 # later making the entire project world-writable.
 if [ "$(id -u)" -eq 0 ] && [ -d /work ]; then
