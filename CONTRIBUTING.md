@@ -10,18 +10,20 @@ Tarawasm requires Python 3.10 or newer. Install the development dependencies
 from the repository root:
 
 ```sh
-python3 -m pip install -r requirements-dev.txt
+python3 -m pip install -r requirements.txt -r requirements-dev.txt
 ```
 
-The complete standalone toolchain can be installed with:
+The complete local language toolchain can be installed with:
 
 ```sh
-sudo make install
+make install
 make check
 ```
 
-The installation script writes system locations and may download compilers and
-binding generators. Use the Docker image described in the README when changing
+The installer supports Ubuntu x86-64 and macOS arm64/x86-64. It prepares managed
+user toolchains and may install apt prerequisites with administrator privileges
+or Homebrew build dependencies, and download compilers and binding generators.
+Use the Docker image described in the README when changing
 the host toolchain is undesirable.
 
 ## Making changes
@@ -43,8 +45,8 @@ Run formatting, linting, type checks, and the non-Docker test suite:
 ```sh
 pre-commit run --all-files --color always
 make check
-make build
 PYTHONPATH=. python3 -m pytest -k "not cli:docker" -vv
+TARAWASM_LOCAL_TOOLCHAIN_IT=1 PYTHONPATH=. python3 -m pytest tests/test_toolchain_local.py -vv
 ```
 
 Changes to Docker behavior or language toolchains should also run the matching
