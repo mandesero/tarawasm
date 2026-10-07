@@ -362,3 +362,21 @@ def test_legacy_dependency_lock_requires_explicit_migration(
     assert (tmp_path / "wkg.lock").exists() == root_lock
     if root_lock:
         assert (tmp_path / "wkg.lock").read_bytes() == b"preserve root pins"
+
+
+@pytest.mark.parametrize("args", [["--enable"], ["--disable", "unknown"]])
+def test_invalid_js_features_fail_before_clean_or_publication(
+    tmp_path, monkeypatch, args
+):
+    conf = _write_project(tmp_path, monkeypatch, "js")
+    output = conf.resolve_path(conf.output)
+    output.parent.mkdir()
+    output.write_bytes(b"previous successful component")
+    monkeypatch.setattr(
+        "tarawasm.cli._run", lambda *_a, **_kw: pytest.fail("must not run tools")
+    )
+    result = CliRunner().invoke(cli, ["build", "--clean", "--", *args])
+    assert result.exit_code == 1
+    assert "requires JS feature names" in result.output
+    assert output.read_bytes() == b"previous successful component"
+    assert not conf.build_dir.exists()

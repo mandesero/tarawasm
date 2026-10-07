@@ -20,8 +20,14 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   with the full `all` target retained for compatibility and testing.
 - Noninteractive setup and JSON diagnostics for CI.
 - Integration coverage for saved local profiles across all five languages.
+- JS integration coverage for npm archive installation, bundling, hyphenated WIT
+  exports and resource methods, HTTP features, compiler metadata, stripping,
+  validation, and execution in native and Docker environments.
 
 ### Changed
+
+- JavaScript builds bundle local and npm ESM dependencies by default.
+- The JS Docker image includes npm and npx from the complete Node distribution.
 
 - CLI runtime dependencies contain only Click; compiler packages
   are installed separately as toolchain/development dependencies.
@@ -37,6 +43,13 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `update` panics after writing it.
 - Linux TinyGo/SDK installation uses checksum-verified archives without requiring
   dpkg-deb on RPM systems.
+
+### Fixed
+
+- JavaScript feature selectors form one effective set with user arguments taking
+  priority over the stdio-only default.
+- Generated JS exports, interfaces, and resource methods use camelCase WIT
+  bindings, with PascalCase resource classes.
 
 ### Removed
 

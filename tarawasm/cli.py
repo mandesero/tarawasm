@@ -574,14 +574,17 @@ def build(
     except BackendError as exc:
         raise _fail(exc)
     temporary_output = conf.build_dir / "publish" / f"{resolved_world}.wasm"
-    command = backend.build_command(
-        conf,
-        world=resolved_world,
-        wit=resolved_wit,
-        source=resolved_source,
-        output=temporary_output,
-        tool_args=list(tool_args),
-    )
+    try:
+        command = backend.build_command(
+            conf,
+            world=resolved_world,
+            wit=resolved_wit,
+            source=resolved_source,
+            output=temporary_output,
+            tool_args=list(tool_args),
+        )
+    except BackendError as exc:
+        raise _fail(exc)
     if tool_help:
         _run(Command((*command.argv, "--help"), command.env), check=False)
         return
