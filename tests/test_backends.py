@@ -116,3 +116,121 @@ def test_go_does_not_accept_a_partial_wasi_world(model):
     )
     with pytest.raises(BackendError, match=r"wasi:io@0\.2\.x/streams"):
         get_backend("go").validate_world(partial)
+
+
+@pytest.mark.parametrize(
+    ("args", "enabled"),
+    [
+        ([], {"stdio"}),
+        (["--enable", "http"], {"stdio", "http"}),
+        (
+            ["--enable=http", "--enable", "random", "clocks"],
+            {"stdio", "http", "random", "clocks"},
+        ),
+        (["--disable", "all", "--enable", "http"], {"http"}),
+        (
+            ["--enable", "all", "-d", "http", "stdio"],
+            {"clocks", "random", "fetch-event"},
+        ),
+        (["--disable=stdio"], set()),
+        (["-dstdio"], set()),
+        (["--enable", "http", "-dhttp"], {"stdio"}),
+        (["-dhttp", "--enable", "http"], {"stdio", "http"}),
+        (["--enable", "http", "--disable", "http"], {"stdio"}),
+        (["--disable", "http", "--enable", "http"], {"stdio", "http"}),
+    ],
+)
+def test_js_feature_selectors_have_user_priority(args, enabled):
+    from tarawasm.backends.javascript import FEATURES, feature_args
+
+    passthrough, result = feature_args(["--debug-bindings", *args])
+    assert passthrough == ["--debug-bindings"]
+    assert result.count("--enable") <= 1
+    assert result.count("--disable") <= 1
+    actual_enabled = (
+        set(result[result.index("--enable") + 1 :]) if "--enable" in result else set()
+    )
+    actual_disabled = (
+        set(
+            result[
+                result.index("--disable")
+                + 1 : result.index("--enable") if "--enable" in result else len(result)
+            ]
+        )
+        if "--disable" in result
+        else set()
+    )
+    assert actual_enabled == enabled
+    assert actual_disabled == set(FEATURES) - enabled
+
+
+@pytest.mark.parametrize("args", [["--enable"], ["--disable="], ["-d", "unknown"]])
+def test_js_rejects_invalid_feature_selectors(args):
+    from tarawasm.backends.javascript import feature_args
+
+    with pytest.raises(BackendError, match="requires JS feature names"):
+        feature_args(args)
+
+
+def test_js_build_bundles_by_default(model, tmp_path):
+    wit, world = model
+    command = get_backend("js").build_command(
+        None,
+        world=world.name,
+        wit=wit,
+        source=Path("main.js"),
+        output=tmp_path / "component.wasm",
+        tool_args=[],
+    )
+    assert "--bundle" in command.argv
+
+
+def test_js_generates_camel_case_exports(tmp_path):
+    wit = tmp_path / "names.wit"
+    wit.write_text(
+        """package test:names;
+interface number-api {
+    resource number-box {
+        constructor(initial-value: u32);
+        get-number: func() -> u32;
+        from-number: static func(initial-value: u32) -> number-box;
+    }
+    add-number: func(first-number: u32) -> u32;
+}
+world names {
+    export add-number: func(first-number: u32) -> u32;
+    export number-api;
+}
+"""
+    )
+    source = get_backend("js").generate_source(
+        WitParser().parse(wit).select_world("names")
+    )
+    for declaration in (
+        "export function addNumber(firstNumber)",
+        "export const numberApi",
+        "class NumberBox",
+        "constructor(initialValue)",
+        "getNumber()",
+        "static fromNumber(initialValue)",
+        "addNumber: (firstNumber)",
+        "    NumberBox,",
+    ):
+        assert declaration in source
+
+
+def test_js_passthrough_cannot_override_managed_output(model, tmp_path):
+    wit, world = model
+    output = tmp_path / "staged.wasm"
+    command = get_backend("js").build_command(
+        None,
+        world=world.name,
+        wit=wit,
+        source=Path("main.js"),
+        output=output,
+        tool_args=["-o", "user.wasm", "-w", "other.wit", "--enable", "http"],
+    )
+    assert command.argv.index("-o") < command.argv.index("--out")
+    assert command.argv.index("-w") < command.argv.index("--wit")
+    assert command.argv[command.argv.index("--out") + 1] == str(output)
+    assert command.argv.index("--enable") > command.argv.index("--out")

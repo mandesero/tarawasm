@@ -262,6 +262,44 @@ The default output is `dist/<world>.wasm`. A custom `--out`, including a path
 outside the project, is published atomically and recorded for safe cleanup. A
 failed build keeps the previous successful component intact.
 
+## JavaScript dependencies and features
+
+JavaScript builds enable Jco bundling by default. ESM imports from local files
+and installed npm packages are bundled; WIT imports remain external. The `js`
+Docker target includes the complete Node distribution with npm and npx:
+
+```console
+docker run --rm -v "$PWD:/work" -w /work tarawasm:js-test-amd64 npm install ./sdk.tgz
+tarawasm build
+tarawasm build -- --enable http
+```
+
+The default feature set contains only `stdio`. User selectors `--enable`,
+`--disable` (or `-d`) accept multiple feature names: `clocks`, `http`, `random`,
+`stdio`, `fetch-event`, and `all`. Selectors apply in command-line order, with
+the last selection for each feature taking priority. For example,
+`build -- --disable all --enable http` enables only HTTP. Other Jco arguments
+remain available after `--`.
+
+Generated JavaScript uses camelCase for WIT functions, interfaces, parameters,
+and resource methods, and PascalCase for resource classes: `add-number` becomes
+`addNumber`, and `number-box.get-number` becomes `NumberBox.getNumber`.
+Existing user source files remain untouched by initialization.
+
+To diagnose compiler selection, inspect `tarawasm doctor --lang js --json`
+for the dependency resolved by the selected Jco, and inspect build stderr.
+[Jco can fall back to ComponentizeJS 0.19.3](https://bytecodealliance.github.io/jco/troubleshooting/common-issues.html#componentize-js-0193-fallback)
+when WIT requests older WASI packages, even with ComponentizeJS 0.23.0 installed.
+The warning reports that fallback. Before stripping producers metadata, check
+the compiler recorded in the actual component:
+
+```console
+wasm-tools metadata show dist/component.wasm --json
+```
+
+Update the project's WASI WIT dependencies to compatible versions (0.2.10 or
+newer) explicitly when appropriate; ordinary builds do not update WIT locks.
+
 ## WIT dependencies
 
 Dependency resolution uses Bytecode Alliance `wkg` and a `wkg.lock` file:

@@ -105,7 +105,8 @@ RUN pip3 install --no-cache-dir "componentize-py==$(python3 -c 'import json; pri
 
 FROM base AS js
 ENV TARAWASM_TOOLCHAIN_LANGUAGE=js
-COPY --from=toolchain-builder /opt/node/bin/node /usr/bin/node
+COPY --from=toolchain-builder /opt/node /opt/node
+ENV PATH="/opt/node/bin:${PATH}"
 COPY --from=toolchain-builder /usr/lib/node_modules /usr/lib/node_modules
 RUN python3 -c 'import json; from pathlib import Path; p=Path("/usr/lib/node_modules/@bytecodealliance/jco"); Path("/usr/local/bin/jco").symlink_to(p/json.loads((p/"package.json").read_text())["bin"]["jco"])'
 
