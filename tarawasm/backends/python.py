@@ -105,10 +105,12 @@ class PythonBackend(LanguageBackend):
         )
 
     def build_command(self, conf, *, world, wit, source, output, tool_args):
-        python_paths: list[str] = []
+        # Explicit paths replace componentize-py's default "." search path.
+        # Search the selected source first, then project bindings/dependencies.
+        python_paths = ["--python-path", str(source.parent), "--python-path", "."]
         persistent = os.environ.get("TARAWASM_PY_SITE_PACKAGES")
         if persistent:
-            python_paths.extend(("--python-path", ".", "--python-path", persistent))
+            python_paths.extend(("--python-path", persistent))
         return Command(
             (
                 "componentize-py",
