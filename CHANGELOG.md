@@ -46,6 +46,9 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Python builds preserve the source directory for imports, including nested
+  `source` paths and `--src` overrides, while retaining project bindings,
+  persistent packages, and additional `--python-path` arguments.
 - JavaScript feature selectors form one effective set with user arguments taking
   priority over the stdio-only default.
 - Generated JS exports, interfaces, and resource methods use camelCase WIT

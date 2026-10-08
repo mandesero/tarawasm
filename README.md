@@ -336,6 +336,11 @@ Paths are relative to the project root containing `tarawasm.json`, so commands
 work from any child directory. Unknown fields are rejected with a field-specific
 error.
 
+Python sources may live in a subdirectory, for example `"source": "src/main.py"`
+or `tarawasm build --src src/main.py`. Builds search the source directory first,
+then the project root for bindings and dependencies. Additional import paths
+can be passed with `tarawasm build -- --python-path extra`.
+
 ```text
 calculator/
 ├── tarawasm.json
