@@ -198,6 +198,19 @@ TinyGo's `wasip2` target requires the selected Go world to import the complete
 versioned `wasi:cli/imports@0.2.x` world. Tarawasm checks the required WASI
 interfaces before invoking TinyGo and reports every missing import.
 
+Go scaffolds follow the catalog-pinned `wit-bindgen-go` representation: WIT
+package/world/interface paths keep their hyphens, named types use the binding
+package alias, homogeneous tuples use arrays, and heterogeneous tuples use
+`cm.Tuple` or `cm.Tuple3` through `cm.Tuple16`. Anonymous longer tuples and
+results with distinct payload types use generic TODO helpers that infer the
+exact signature from the bindings, including their private layout/storage types.
+The `cm` import is emitted only when the scaffold uses it.
+
+Go module paths remain user-owned. When changing `go.mod` or using bindgen
+layout flags such as `bind -- --versioned`, update the implementation's imports
+to match (for example, `example.org/team/project/internal/docs/my-pkg/v0.1.0/my-world`).
+`bind` passes these flags through and does not rewrite source files.
+
 Ready-to-build projects for every language live in [`examples`](examples).
 The examples guide shows both how to run a checked-in project and how to create
 a fresh project from its WIT contract.
