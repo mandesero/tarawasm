@@ -1,0 +1,42 @@
+package docs:tuples@0.1.0;
+
+
+world tuples {
+  import wasi:cli/environment@0.2.3;
+  import wasi:cli/exit@0.2.3;
+  import wasi:io/error@0.2.3;
+  import wasi:io/poll@0.2.3;
+  import wasi:io/streams@0.2.3;
+  import wasi:cli/stdin@0.2.3;
+  import wasi:cli/stdout@0.2.3;
+  import wasi:cli/stderr@0.2.3;
+  import wasi:cli/terminal-input@0.2.3;
+  import wasi:cli/terminal-output@0.2.3;
+  import wasi:cli/terminal-stdin@0.2.3;
+  import wasi:cli/terminal-stdout@0.2.3;
+  import wasi:cli/terminal-stderr@0.2.3;
+  import wasi:clocks/monotonic-clock@0.2.3;
+  import wasi:clocks/wall-clock@0.2.3;
+  import wasi:filesystem/types@0.2.3;
+  import wasi:filesystem/preopens@0.2.3;
+  import wasi:sockets/network@0.2.3;
+  import wasi:sockets/instance-network@0.2.3;
+  import wasi:sockets/udp@0.2.3;
+  import wasi:sockets/udp-create-socket@0.2.3;
+  import wasi:sockets/tcp@0.2.3;
+  import wasi:sockets/tcp-create-socket@0.2.3;
+  import wasi:sockets/ip-name-lookup@0.2.3;
+  import wasi:random/random@0.2.3;
+  import wasi:random/insecure@0.2.3;
+  import wasi:random/insecure-seed@0.2.3;
+
+  export triple: func(value: tuple<u32, u32, u32>) -> tuple<u32, u32, u32>;
+  export pair: func(value: tuple<u32, string>) -> tuple<u32, string>;
+  export mixed: func(value: tuple<u32, string, u64>) -> tuple<u32, string, u64>;
+  export nested: func(value: list<option<tuple<u32, u32, u32>>>) -> list<option<tuple<u32, string, u64>>>;
+  export single: func(value: tuple<u32>) -> tuple<u32>;
+  export fallible: func(value: result<tuple<u32, string, u64>>) -> option<result<tuple<u32, u32, u32>, string>>;
+  export long: func(value: tuple<u32, string, u32, string, u32, string, u32, string, u32, string, u32, string, u32, string, u32, string, u32>) -> tuple<u32, string, u32, string, u32, string, u32, string, u32, string, u32, string, u32, string, u32, string, u32>;
+  type named-tuple = tuple<u32, string, u64>;
+  export named: func(value: named-tuple) -> named-tuple;
+}

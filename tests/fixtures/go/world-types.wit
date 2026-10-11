@@ -1,0 +1,41 @@
+package docs:people@0.1.0;
+
+interface api { record person { name: string } get-person: func(value: person) -> person; nested: func(values: list<option<person>>) -> result<person>; }
+world people {
+  import wasi:cli/environment@0.2.3;
+  import wasi:cli/exit@0.2.3;
+  import wasi:io/error@0.2.3;
+  import wasi:io/poll@0.2.3;
+  import wasi:io/streams@0.2.3;
+  import wasi:cli/stdin@0.2.3;
+  import wasi:cli/stdout@0.2.3;
+  import wasi:cli/stderr@0.2.3;
+  import wasi:cli/terminal-input@0.2.3;
+  import wasi:cli/terminal-output@0.2.3;
+  import wasi:cli/terminal-stdin@0.2.3;
+  import wasi:cli/terminal-stdout@0.2.3;
+  import wasi:cli/terminal-stderr@0.2.3;
+  import wasi:clocks/monotonic-clock@0.2.3;
+  import wasi:clocks/wall-clock@0.2.3;
+  import wasi:filesystem/types@0.2.3;
+  import wasi:filesystem/preopens@0.2.3;
+  import wasi:sockets/network@0.2.3;
+  import wasi:sockets/instance-network@0.2.3;
+  import wasi:sockets/udp@0.2.3;
+  import wasi:sockets/udp-create-socket@0.2.3;
+  import wasi:sockets/tcp@0.2.3;
+  import wasi:sockets/tcp-create-socket@0.2.3;
+  import wasi:sockets/ip-name-lookup@0.2.3;
+  import wasi:random/random@0.2.3;
+  import wasi:random/insecure@0.2.3;
+  import wasi:random/insecure-seed@0.2.3;
+
+  record person { name: string }
+  type people = list<option<person>>;
+  type outcome = result<person, string>;
+  export get-person: func(value: person) -> person;
+  export nested: func(values: list<option<person>>) -> result<person>;
+  export fallible: func(value: option<result<person, string>>) -> result<string, person>;
+  export named: func(values: people) -> outcome;
+  export api;
+}

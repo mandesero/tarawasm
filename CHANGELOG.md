@@ -46,6 +46,13 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Go scaffolds preserve hyphenated WIT import paths, qualify named world and
+  interface types, and match the tuple/result representations of wit-bindgen-go
+  0.7.0, including nested types and long heterogeneous tuples. Numeric-only
+  exports no longer receive an unused `cm` import from their WASI imports.
+- Go regression fixtures compile real bindings and TinyGo components through
+  CLI init/bind/build, strip and validate, including custom module paths and
+  `--versioned`/`--generate-wit` binding flags.
 - Python builds preserve the source directory for imports, including nested
   `source` paths and `--src` overrides, while retaining project bindings,
   persistent packages, and additional `--python-path` arguments.
