@@ -28,12 +28,12 @@ def test_macos_release_archives_populate_runtime_paths(
     def download(url, destination, checksum=None):
         downloads.append((url, checksum))
         assert checksum and len(checksum) == 64
-        if "go1.27.1" in url:
+        if "go1.27.2" in url:
             name = "go/bin/go"
-        elif "tinygo0.42.0" in url:
+        elif "tinygo0.43.0" in url:
             name = "tinygo/bin/tinygo"
         elif "binaryen" in url:
-            name = "binaryen-version_116/bin/wasm-opt"
+            name = "binaryen-version_133/bin/wasm-opt"
         else:
             sdk_arch = "arm64" if architecture == "arm64" else "x86_64"
             name = f"wasi-sdk-34.0-{sdk_arch}-macos/bin/clang"
@@ -58,7 +58,9 @@ def test_macos_release_archives_populate_runtime_paths(
         assert (root / name).read_bytes() == b"tool"
     assert f"darwin-{architecture}" in downloads[0][0]
     assert f"darwin-{architecture}" in downloads[1][0]
-    assert downloads[2][1] == installer.MACOS_CHECKSUMS["binaryen"][architecture]
+    assert downloads[2][1] == installer.checksum_for(
+        "binaryen", "133", "darwin", architecture
+    )
     assert downloads[3][1] == installer.MACOS_CHECKSUMS["wasi-sdk"][architecture]
 
 
@@ -321,11 +323,15 @@ def test_linux_sdk_archives_work_without_dpkg(linux, monkeypatch):
     def download(url, destination, checksum):
         downloads.append(url)
         assert checksum and len(checksum) == 64
-        name = (
-            "tinygo/bin/tinygo"
-            if "tinygo" in url
-            else "wasi-sdk-34.0-x86_64-linux/bin/clang"
-        )
+        if "tinygo" in url:
+            name = "tinygo/bin/tinygo"
+        elif "binaryen" in url:
+            name = "binaryen-version_133/bin/wasm-opt"
+            assert checksum == installer.checksum_for(
+                "binaryen", "133", "linux", "amd64"
+            )
+        else:
+            name = "wasi-sdk-34.0-x86_64-linux/bin/clang"
         with tarfile.open(destination, "w:gz") as archive:
             member = tarfile.TarInfo(name)
             member.size = 4
@@ -339,6 +345,7 @@ def test_linux_sdk_archives_work_without_dpkg(linux, monkeypatch):
     installer.install_tools(["tinygo", "clang"])
     assert all(url.endswith(".tar.gz") for url in downloads)
     assert (linux.parent / "tools/usr/local/lib/tinygo/bin/tinygo").is_file()
+    assert (linux.parent / "tools/usr/local/lib/tinygo/bin/wasm-opt").is_file()
     assert (linux.parent / "tools/opt/wasi-sdk/bin/clang").is_file()
 
 

@@ -13,15 +13,12 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from .catalog import CATALOG, TOOLS, version_tuple
+from .catalog import CATALOG, TOOLS, binaryen_version, version_tuple
 from .discovery import discover_local, managed_environment
+from .releases import checksum_for
 from .settings import ToolchainError, data_home
 
 MACOS_CHECKSUMS = {
-    "tinygo": {
-        "arm64": "493da3585e66c5da677a4be39402faf2041b4e45a61eb456e4547eca753a544e",
-        "amd64": "ef7b96cf59de5714a7493a696e9db141a85a99459620b00c42cb3bad14be2af2",
-    },
     "wasi-sdk": {
         "arm64": "9c59398106b417f8f14913380fdf0097a8cc0ff4af9eb3ce0065a859e88d49e9",
         "amd64": "87d27fa8adc68dee59bfbf2e22a6d34ef717c34d6bf1d8af2a56fc929d9ce0eb",
@@ -38,20 +35,10 @@ MACOS_CHECKSUMS = {
         "arm64": "68a8898f8d139d24bd129c5206007dfb7636898edf7659348760d8159ecea9d6",
         "amd64": "0fe161319d31be62e2a39c8786772230a36e120be457d67c34b67706de91911b",
     },
-    "go": {
-        "arm64": "ee215d57e0ec269c60cc9ceca68e6bda321ba9ee5afe24f4b0988703c2d87d12",
-        "amd64": "8f8f52c6649542cf027bbc9b9c68d1ec042f9f34808a40413f0b8b3f66f3caa4",
-    },
-    "binaryen": {
-        "arm64": "d8c978aec366629eae6fefbcedaf5093b829e4c5ab0e2990973b6e337c544867",
-        "amd64": "266f63d3d8d9e17d5e532b8fc6c5340f92b3fea2020a634957a6dd938294ba56",
-    },
 }
 
 LINUX_CHECKSUMS = {
-    "tinygo": "b87688fa2e19cee7d813cad7fd7dadb71dff3198e47125aba66ba4af5e490438",
     "wasi-sdk": "b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4",
-    "go": "63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445",
 }
 
 
@@ -430,10 +417,8 @@ def install_tools(names: list[str]) -> None:
                 download(
                     f"https://go.dev/dl/go{version}.{'darwin' if macos else 'linux'}-{architecture}.tar.gz",
                     archive,
-                    (
-                        MACOS_CHECKSUMS["go"][architecture]
-                        if macos
-                        else LINUX_CHECKSUMS["go"]
+                    checksum_for(
+                        "go", version, "darwin" if macos else "linux", architecture
                     ),
                 )
                 extract_archive(archive, temporary / "go-extracted")
@@ -523,13 +508,11 @@ def install_tools(names: list[str]) -> None:
 
 def install_linux_sdk(kind: str, version: str, root: Path, temporary: Path) -> None:
     if kind == "tinygo":
-        folder = "tinygo"
-        url = f"https://github.com/tinygo-org/tinygo/releases/download/v{version}/tinygo{version}.linux-amd64.tar.gz"
-        destination = root / "usr/local/lib/tinygo"
-    else:
-        folder = f"wasi-sdk-{version}-x86_64-linux"
-        url = f"https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-{version.split('.')[0]}/{folder}.tar.gz"
-        destination = root / "opt/wasi-sdk"
+        install_tinygo(version, "linux", "amd64", root, temporary)
+        return
+    folder = f"wasi-sdk-{version}-x86_64-linux"
+    url = f"https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-{version.split('.')[0]}/{folder}.tar.gz"
+    destination = root / "opt/wasi-sdk"
     archive = temporary / f"{kind}.tar.gz"
     download(url, archive, LINUX_CHECKSUMS[kind])
     extracted = temporary / f"{kind}-extracted"
@@ -565,32 +548,51 @@ def install_macos_sdk(
     kind: str, version: str, architecture: str, root: Path, temporary: Path
 ) -> None:
     if kind == "tinygo":
-        url = f"https://github.com/tinygo-org/tinygo/releases/download/v{version}/tinygo{version}.darwin-{architecture}.tar.gz"
-        folder = "tinygo"
-        destination = root / "usr/local/lib/tinygo"
-    else:
-        arch = "arm64" if architecture == "arm64" else "x86_64"
-        folder = f"wasi-sdk-{version}-{arch}-macos"
-        url = f"https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-{version.split('.')[0]}/{folder}.tar.gz"
-        destination = root / "opt/wasi-sdk"
+        install_tinygo(version, "darwin", architecture, root, temporary)
+        return
+    arch = "arm64" if architecture == "arm64" else "x86_64"
+    folder = f"wasi-sdk-{version}-{arch}-macos"
+    url = f"https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-{version.split('.')[0]}/{folder}.tar.gz"
+    destination = root / "opt/wasi-sdk"
     archive = temporary / f"{kind}.tar.gz"
     download(url, archive, MACOS_CHECKSUMS[kind][architecture])
     extracted = temporary / f"{kind}-extracted"
     extract_archive(archive, extracted)
-    if kind == "tinygo":
-        # TinyGo bundles Binaryen 116 on Linux, but omits it on macOS.
-        arch = "arm64" if architecture == "arm64" else "x86_64"
-        binaryen = temporary / "binaryen.tar.gz"
-        download(
-            f"https://github.com/WebAssembly/binaryen/releases/download/version_116/binaryen-version_116-{arch}-macos.tar.gz",
-            binaryen,
-            MACOS_CHECKSUMS["binaryen"][architecture],
-        )
-        extract_archive(binaryen, temporary / "binaryen")
-        copy_release_tree(
-            temporary / "binaryen/binaryen-version_116", extracted / folder
-        )
     replace_release_tree(extracted / folder, destination)
+
+
+def install_tinygo(
+    version: str, system: str, architecture: str, root: Path, temporary: Path
+) -> None:
+    optimizer_version = binaryen_version(version)
+    tinygo_checksum = checksum_for("tinygo", version, system, architecture)
+    optimizer_checksum = checksum_for(
+        "binaryen", optimizer_version, system, architecture
+    )
+    archive = temporary / "tinygo.tar.gz"
+    download(
+        f"https://github.com/tinygo-org/tinygo/releases/download/v{version}/tinygo{version}.{system}-{architecture}.tar.gz",
+        archive,
+        tinygo_checksum,
+    )
+    extracted = temporary / "tinygo-extracted"
+    extract_archive(archive, extracted)
+    arch = "arm64" if architecture == "arm64" else "x86_64"
+    optimizer_platform = f"{arch}-{'macos' if system == 'darwin' else 'linux'}"
+    optimizer = temporary / "binaryen.tar.gz"
+    download(
+        f"https://github.com/WebAssembly/binaryen/releases/download/version_{optimizer_version}/binaryen-version_{optimizer_version}-{optimizer_platform}.tar.gz",
+        optimizer,
+        optimizer_checksum,
+    )
+    extract_archive(optimizer, temporary / "binaryen")
+    # Publish the compiler and external optimizer as one complete managed release.
+    # Downloads/checksums/extraction all finish before replacing the old version.
+    copy_release_tree(
+        temporary / f"binaryen/binaryen-version_{optimizer_version}",
+        extracted / "tinygo",
+    )
+    replace_release_tree(extracted / "tinygo", root / "usr/local/lib/tinygo")
 
 
 def prerequisites_command() -> list[str]:

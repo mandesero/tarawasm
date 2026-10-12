@@ -12,6 +12,7 @@ from pathlib import Path
 from .catalog import (
     CATALOG,
     TOOLS,
+    binaryen_version,
     default_image,
     supported_range,
     tools_for,
@@ -43,7 +44,7 @@ def managed_environment() -> dict[str, str]:
     return env
 
 
-def local_environment(profile: dict) -> dict[str, str]:
+def local_environment(profile: dict, *, language: str | None = None) -> dict[str, str]:
     env = managed_environment()
     parents = list(
         dict.fromkeys(
@@ -56,12 +57,70 @@ def local_environment(profile: dict) -> dict[str, str]:
         env["RUSTC"] = profile["tools"]["rustc"]
     if clang and (Path(clang).parent.parent / "share/wasi-sysroot").is_dir():
         env["WASI_SDK_PATH"] = str(Path(clang).parent.parent)
+    if language == "go" and not env.get("WASMOPT"):
+        tinygo = profile.get("tools", {}).get("tinygo") or shutil.which(
+            "tinygo", path=env["PATH"]
+        )
+        if tinygo:
+            optimizer = optimizer_path(tinygo, env)
+            if optimizer:
+                # Pin compilation to the same optimizer that doctor inspected.
+                # TinyGo otherwise searches its bundled tools before PATH.
+                env["WASMOPT"] = optimizer
     return env
 
 
+def optimizer_path(tinygo: str, env: dict[str, str]) -> str | None:
+    explicit = env.get("WASMOPT")
+    if explicit:
+        return shutil.which(explicit, path=env["PATH"]) or explicit
+    selected = shutil.which("wasm-opt", path=env["PATH"])
+    if selected:
+        return selected
+    root = env.get("TINYGOROOT")
+    bundled = (
+        Path(root) / "bin/wasm-opt"
+        if root
+        else Path(tinygo).resolve().with_name("wasm-opt")
+    )
+    return str(bundled) if os.access(bundled, os.X_OK) else None
+
+
+def optimizer_report(tinygo: str, version: str, env: dict[str, str]) -> dict:
+    expected = binaryen_version(version)
+    path = optimizer_path(tinygo, env)
+    report = {"location": path, "version": None, "supported": expected}
+    if not path or not os.access(path, os.X_OK):
+        return {
+            **report,
+            "status": "missing",
+            "detail": f"wasm-opt missing: TinyGo {version} requires Binaryen {expected}; run toolchain setup go --mode local --install --yes --upgrade or set WASMOPT",
+        }
+    probe = run_probe([path, "--version"], env=env)
+    match = re.search(r"\bwasm-opt version (\d+)\b", probe.stdout + probe.stderr)
+    if probe.returncode or not match:
+        return {
+            **report,
+            "status": "incompatible",
+            "detail": f"wasm-opt at {path} cannot report a usable version; TinyGo {version} requires Binaryen {expected}",
+        }
+    found = match.group(1)
+    compatible = found == expected
+    return {
+        **report,
+        "version": found,
+        "status": "ready" if compatible else "incompatible",
+        "detail": (
+            f"wasm-opt {found} at {path}"
+            if compatible
+            else f"wasm-opt {found} at {path} is incompatible: TinyGo {version} requires Binaryen {expected}; set WASMOPT or upgrade the managed Go toolchain"
+        ),
+    }
+
+
 @contextmanager
-def local_execution_environment(profile: dict):
-    env = local_environment(profile)
+def local_execution_environment(profile: dict, *, language: str | None = None):
+    env = local_environment(profile, language=language)
     node = profile.get("tools", {}).get("node")
     if node:
         # npm and jco use /usr/bin/env node, including when the selected
@@ -87,12 +146,13 @@ def run_probe(
 
 def discover_local(language: str, profile: dict | None = None) -> dict:
     profile = profile or {"mode": "local"}
-    with local_execution_environment(profile) as env:
+    with local_execution_environment(profile, language=language) as env:
         return _discover_local(language, profile, env)
 
 
 def _discover_local(language: str, profile: dict, env: dict[str, str]) -> dict:
     rows = []
+    row: dict
     for name in tools_for(language):
         if TOOLS[name]["kind"] == "npm-package":
             package = TOOLS[name]["package"]
@@ -261,20 +321,12 @@ def _discover_local(language: str, profile: dict, env: dict[str, str]) -> dict:
                         detail="found",
                     )
                     if name == "tinygo" and row["status"] == "ready":
-                        optimizer = (
-                            env.get("WASMOPT")
-                            or shutil.which("wasm-opt", path=env["PATH"])
-                            or str(Path(path).resolve().with_name("wasm-opt"))
+                        optimizer = optimizer_report(path, version, env)
+                        row.update(
+                            optimizer=optimizer,
+                            status=optimizer["status"],
+                            detail=optimizer["detail"],
                         )
-                        if not os.access(optimizer, os.X_OK):
-                            row.update(
-                                status="missing", detail="wasm-opt dependency missing"
-                            )
-                        elif run_probe([optimizer, "--version"], env=env).returncode:
-                            row.update(
-                                status="incompatible",
-                                detail="wasm-opt dependency cannot run",
-                            )
                     if name == "clang":
                         sdk = Path(
                             env.get("WASI_SDK_PATH", str(Path(path).parent.parent))

@@ -5,6 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 
 COPY tarawasm/toolchains/catalog.json /app/toolchain-catalog.json
+COPY tarawasm/toolchains/releases.py /app/releases.py
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -18,8 +19,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Go manually
 RUN go_version=$(python3 -c 'import json; print(json.load(open("toolchain-catalog.json"))["tools"]["go"]["recommended"])') && \
+    go_checksum=$(python3 -c "from releases import checksum_for; print(checksum_for('go', '${go_version}', 'linux', 'amd64'))") && \
     rm -rf /usr/local/go && \
     curl -fL "https://go.dev/dl/go${go_version}.linux-amd64.tar.gz" -o go.tar.gz && \
+    echo "${go_checksum}  go.tar.gz" | sha256sum -c - && \
     tar -C /usr/local -xzf go.tar.gz && \
     rm go.tar.gz
 ENV PATH="/usr/local/go/bin:${PATH}"
@@ -30,11 +33,20 @@ ENV CARGO_HOME=/opt/cargo
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --profile minimal --default-toolchain "$(python3 -c 'import json; print(json.load(open("toolchain-catalog.json"))["tools"]["rustc"]["recommended"])')"
 ENV PATH="${CARGO_HOME}/bin:${PATH}"
 
-# Install TinyGo
+# Install TinyGo and its external, verified Binaryen dependency on Linux.
 RUN tinygo_version=$(python3 -c 'import json; print(json.load(open("toolchain-catalog.json"))["tools"]["tinygo"]["recommended"])') && \
-    curl -fL "https://github.com/tinygo-org/tinygo/releases/download/v${tinygo_version}/tinygo_${tinygo_version}_amd64.deb" -o tinygo.deb && \
-    dpkg -i tinygo.deb && \
-    rm tinygo.deb
+    tinygo_checksum=$(python3 -c "from releases import checksum_for; print(checksum_for('tinygo', '${tinygo_version}', 'linux', 'amd64'))") && \
+    binaryen_version=$(python3 -c 'import json; c=json.load(open("toolchain-catalog.json")); v=c["tools"]["tinygo"]["recommended"].rsplit(".", 1)[0]; print(c["tools"]["tinygo"]["binaryen_versions"][v])') && \
+    binaryen_checksum=$(python3 -c "from releases import checksum_for; print(checksum_for('binaryen', '${binaryen_version}', 'linux', 'amd64'))") && \
+    curl -fL "https://github.com/tinygo-org/tinygo/releases/download/v${tinygo_version}/tinygo${tinygo_version}.linux-amd64.tar.gz" -o tinygo.tar.gz && \
+    echo "${tinygo_checksum}  tinygo.tar.gz" | sha256sum -c - && \
+    curl -fL "https://github.com/WebAssembly/binaryen/releases/download/version_${binaryen_version}/binaryen-version_${binaryen_version}-x86_64-linux.tar.gz" -o binaryen.tar.gz && \
+    echo "${binaryen_checksum}  binaryen.tar.gz" | sha256sum -c - && \
+    tar -C /usr/local/lib -xzf tinygo.tar.gz && \
+    mkdir binaryen && tar -C binaryen --strip-components=1 -xzf binaryen.tar.gz && \
+    cp -a binaryen/. /usr/local/lib/tinygo/ && \
+    rm -rf tinygo.tar.gz binaryen.tar.gz binaryen && \
+    /usr/local/lib/tinygo/bin/wasm-opt --version
 
 # WASM tools
 RUN python3 -c 'import json,subprocess; c=json.load(open("toolchain-catalog.json")); [subprocess.run(["cargo","install","--locked",c["tools"][n]["package"],"--version",c["tools"][n]["recommended"]],check=True) for n in ("wkg","wasm-tools","cargo-component","wit-bindgen")]'
@@ -56,7 +68,7 @@ RUN sdk_version=$(python3 -c 'import json; print(json.load(open("toolchain-catal
     rm wasi.deb && \
     rm -rf /var/lib/apt/lists/*
 ENV WASI_SDK_PATH=/opt/wasi-sdk
-ENV PATH="${WASI_SDK_PATH}/bin:${PATH}"
+ENV PATH="${WASI_SDK_PATH}/bin:/usr/local/lib/tinygo/bin:${PATH}"
 
 # Wasm runtime for in-container execution in tests
 RUN curl https://wasmtime.dev/install.sh -sSf | bash -s -- --version "v$(python3 -c 'import json; print(json.load(open("toolchain-catalog.json"))["packages"]["wasmtime"])')" && \

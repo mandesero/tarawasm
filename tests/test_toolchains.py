@@ -54,7 +54,10 @@ def test_versions_include_upper_bound():
     assert version_status("go", "1.25.6") == "ready"
     assert version_status("go", "1.24.9") == "outdated"
     assert version_status("go", "1.28.0") == "incompatible"
-    assert version_status("tinygo", "0.43.0") == "incompatible"
+    assert version_status("go", "1.27.2") == "ready"
+    assert version_status("tinygo", "0.42.0") == "ready"
+    assert version_status("tinygo", "0.43.0") == "ready"
+    assert version_status("tinygo", "0.44.0") == "incompatible"
 
 
 def test_project_overrides_user_and_lock_constrains_versions(tmp_path):

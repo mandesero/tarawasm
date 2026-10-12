@@ -69,8 +69,8 @@ Explicit custom binary paths are never overwritten by setup. macOS requires
 Python 3.10+ and Xcode Command Line Tools. Preparing the Rust language toolchain
 also requires an existing Homebrew installation for build dependencies
 (`pkg-config` and `openssl@3`). Go, TinyGo, WASI SDK, and common Wasm tools use
-official, checksum-verified macOS releases; TinyGo also installs Binaryen 116
-(`wasm-opt`), matching its Linux distribution. JavaScript installation pins the
+official, checksum-verified macOS releases; TinyGo also installs matching Binaryen
+(`wasm-opt`) on both Linux and macOS. JavaScript installation pins the
 preview2-shim 0.17.8 dependency used by componentize-js; newer shim releases
 remove the default filesystem preopens required by its embedded splicer. Homebrew and system Python are not
 installed or replaced by tarawasm. Other platforms can use an existing compatible
@@ -197,6 +197,33 @@ Implement the generated functions, then run `tarawasm build` again.
 TinyGo's `wasip2` target requires the selected Go world to import the complete
 versioned `wasi:cli/imports@0.2.x` world. Tarawasm checks the required WASI
 interfaces before invoking TinyGo and reports every missing import.
+
+The recommended Go toolchain is Go 1.27.2, TinyGo 0.43.0 and Binaryen 133.
+`toolchain setup go --mode local --install --yes` installs verified release
+archives on Linux amd64 and macOS arm64/amd64. Use the same command with
+`--upgrade` to update an unlocked managed 0.42 installation. TinyGo 0.42 remains
+supported with Binaryen 116. Compiler and optimizer archives are verified by
+version/platform SHA256 before the complete TinyGo release is replaced; a failed
+download or checksum preserves the previous compiler/optimizer release.
+
+Tarawasm supplies the managed tool paths to each CLI operation. For Go it pins
+`WASMOPT` to the optimizer selected from PATH or the compiler's directory;
+an explicit `WASMOPT` takes priority. `doctor --lang go` checks that optimizer's
+version against the selected TinyGo release and includes its path/version in
+the report. A new CLI process finds installed managed tools without shell PATH
+changes. Source-built Docker Go/full images use the same catalog and verified
+Linux archives, including an external Binaryen installation.
+
+Ordinary builds retain TinyGo's default asyncify scheduler. To select the
+explicit unwind mode, pass the flags yourself:
+
+```sh
+tarawasm build -- -scheduler=none -panic-unwind=explicit
+```
+
+Tarawasm does not add these flags automatically. Runtime regression tests exercise
+goroutine/channel scheduling in the default mode and nested defer/panic/recover
+behavior in the explicit mode, in addition to component stripping and validation.
 
 Go scaffolds follow the catalog-pinned `wit-bindgen-go` representation: WIT
 package/world/interface paths keep their hyphens, named types use the binding
