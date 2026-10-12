@@ -309,7 +309,9 @@ def execution_options(function):
             previous = os.environ.copy()
             token = ACTIVE.set(profile)
             try:
-                with local_execution_environment(profile) as environment:
+                with local_execution_environment(
+                    profile, language=language
+                ) as environment:
                     os.environ.update(environment)
                     result = function(*args, **kwargs)
                 if remember:

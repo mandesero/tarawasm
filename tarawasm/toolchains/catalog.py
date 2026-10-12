@@ -45,3 +45,8 @@ def supported_range(name: str) -> str:
 
 def default_image(language: str) -> str:
     return f"mandeser0/tarawasm:{CATALOG['image_release']}-{language}"
+
+
+def binaryen_version(tinygo_version: str) -> str:
+    major, minor, _ = version_tuple(tinygo_version)
+    return TOOLS["tinygo"]["binaryen_versions"][f"{major}.{minor}"]

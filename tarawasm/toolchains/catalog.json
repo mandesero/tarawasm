@@ -61,7 +61,7 @@
     "go": {
       "minimum": "1.25.0",
       "maximum_exclusive": "1.28.0",
-      "recommended": "1.27.1",
+      "recommended": "1.27.2",
       "version_args": [
         "version"
       ],
@@ -72,15 +72,19 @@
     },
     "tinygo": {
       "minimum": "0.42.0",
-      "maximum_exclusive": "0.43.0",
-      "recommended": "0.42.0",
+      "maximum_exclusive": "0.44.0",
+      "recommended": "0.43.0",
       "version_args": [
         "version"
       ],
       "kind": "tinygo",
       "languages": [
         "go"
-      ]
+      ],
+      "binaryen_versions": {
+        "0.42": "116",
+        "0.43": "133"
+      }
     },
     "rustc": {
       "minimum": "1.93.1",
@@ -191,6 +195,6 @@
     "wit-bindgen-go": "0.7.0",
     "click": "8.5.0",
     "wasmtime": "49.0.2",
-    "binaryen": "116"
+    "binaryen": "133"
   }
 }

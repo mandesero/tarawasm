@@ -26,6 +26,16 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Recommend Go 1.27.2 and TinyGo 0.43.0 with Binaryen 133. Keep TinyGo 0.42
+  compatible with Binaryen 116, and preserve user-selected build flags and the
+  ordinary asyncify build mode.
+- Install a verified external Binaryen release with TinyGo on Linux amd64 and
+  macOS arm64/amd64; publish the complete compiler/optimizer tree only after both
+  downloads and checksum checks succeed. Go/TinyGo/Binaryen checksums are keyed
+  by version, OS and architecture and shared with source-built Docker images.
+- Go discovery checks the selected wasm-opt version and pins that same path via
+  WASMOPT during local CLI operations, with explicit environment overrides taking
+  priority.
 - JavaScript builds bundle local and npm ESM dependencies by default.
 - The JS Docker image includes npm and npx from the complete Node distribution.
 
