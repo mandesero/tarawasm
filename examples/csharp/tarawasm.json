@@ -1,0 +1,7 @@
+{
+  "language": "csharp",
+  "world": "calculator",
+  "wit": {"path": "wit", "package": "example:calculator@0.1.0"},
+  "source": "Component.csproj",
+  "output": "dist/calculator.wasm"
+}

@@ -2,6 +2,7 @@
 
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,10 @@ from tarawasm.toolchains.catalog import LANGUAGES
 def test_host_uses_selected_local_toolchain(tmp_path, language):
     if os.environ.get("TARAWASM_LOCAL_TOOLCHAIN_IT") != "1":
         pytest.skip("TARAWASM_LOCAL_TOOLCHAIN_IT is not enabled")
+    if language == "csharp" and platform.system() != "Linux":
+        pytest.skip(
+            "C# NativeAOT-LLVM requires Linux amd64; macOS uses explicit Docker"
+        )
     root = Path(__file__).resolve().parents[1]
     env = os.environ.copy()
     env.update(PYTHONPATH=str(root), TARAWASM_CONFIG_HOME=str(tmp_path / "config"))
@@ -24,7 +29,9 @@ def test_host_uses_selected_local_toolchain(tmp_path, language):
     project = tmp_path / "project"
     project.mkdir()
     shutil.copy2(
-        root / f"examples/{language}/docs:adder@0.1.0.wasm", project / "input.wasm"
+        root
+        / f"examples/{'c' if language == 'csharp' else language}/docs:adder@0.1.0.wasm",
+        project / "input.wasm",
     )
 
     def invoke(*args):

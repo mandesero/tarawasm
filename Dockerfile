@@ -76,10 +76,6 @@ RUN curl https://wasmtime.dev/install.sh -sSf | bash -s -- --version "v$(python3
     rm -rf /root/.wasmtime
 
 COPY tarawasm /app/tarawasm
-COPY docker-scripts /app/docker-scripts
-COPY scripts /app/scripts
-COPY tests /app/tests
-COPY examples /app/examples
 COPY requirements*.txt Makefile pyproject.toml /app/
 
 ENV INSIDE_DOCKER=1
@@ -89,6 +85,25 @@ ENV TARAWASM_TOOLCHAIN_LANGUAGE=all
 RUN pip3 install --no-cache-dir -r requirements.txt && \
     pip3 install --no-cache-dir "componentize-py==$(python3 -c 'import json; print(json.load(open("toolchain-catalog.json"))["tools"]["componentize-py"]["recommended"])')"
 
+# C# has a separate WASI SDK: NativeAOT-LLVM requires 29.0, while C uses 34.0.
+# Managed setup pins archives and NuGet hashes, then builds/validates a probe.
+ENV TARAWASM_CSHARP_HOME=/opt/tarawasm-csharp
+ENV PATH="/opt/tarawasm-managed/dotnet:${PATH}"
+RUN apt-get update && apt-get install -y --no-install-recommends libicu70 libgssapi-krb5-2 zlib1g \
+    && rm -rf /var/lib/apt/lists/* \
+    && TARAWASM_DATA_HOME=/opt/tarawasm-managed python3 -m tarawasm.toolchains.installer dotnet
+
+# NuGet restores tools with owner-only execute bits. Image fallback packages
+# must also be executable by the host UID used for project operations.
+RUN chmod -R a+rX /opt/tarawasm-csharp/packages \
+    && setpriv --reuid=65534 --regid=65534 --clear-groups \
+       env HOME=/tmp/tarawasm-image-probe DOTNET_CLI_HOME=/tmp/tarawasm-image-probe \
+       python3 -m tarawasm.cli doctor --lang csharp --json
+
+COPY docker-scripts /app/docker-scripts
+COPY scripts /app/scripts
+COPY tests /app/tests
+COPY examples /app/examples
 RUN chmod +x /app/docker-scripts/entrypoint.sh
 
 ENTRYPOINT ["/app/docker-scripts/entrypoint.sh"]
@@ -143,6 +158,14 @@ ENV TARAWASM_TOOLCHAIN_LANGUAGE=c WASI_SDK_PATH=/opt/wasi-sdk
 COPY --from=toolchain-builder /opt/wasi-sdk /opt/wasi-sdk
 COPY --from=toolchain-builder /opt/cargo/bin/wit-bindgen /usr/local/bin/wit-bindgen
 ENV PATH="/opt/wasi-sdk/bin:${PATH}"
+
+FROM base AS csharp
+ENV TARAWASM_TOOLCHAIN_LANGUAGE=csharp TARAWASM_CSHARP_HOME=/opt/tarawasm-csharp
+COPY --from=toolchain-builder /opt/tarawasm-managed/dotnet /opt/tarawasm-managed/dotnet
+COPY --from=toolchain-builder /opt/tarawasm-csharp /opt/tarawasm-csharp
+ENV PATH="/opt/tarawasm-managed/dotnet:${PATH}"
+RUN apt-get update && apt-get install -y --no-install-recommends libicu70 libgssapi-krb5-2 zlib1g \
+    && rm -rf /var/lib/apt/lists/*
 
 # Preserve the full toolchain/test image as the default for existing users.
 FROM toolchain-builder AS all

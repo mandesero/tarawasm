@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { existsSync, realpathSync, readFileSync, mkdirSync, symlinkSync } from 'node:fs';
+import { delimiter, join, dirname } from 'node:path';
+const jco = process.env.PATH.split(delimiter).map(p => join(p, 'jco')).find(existsSync);
+const require = createRequire(realpathSync(jco));
+let shim = dirname(require.resolve('@bytecodealliance/preview2-shim/cli'));
+while (!existsSync(join(shim, 'package.json')) || JSON.parse(readFileSync(join(shim, 'package.json'), 'utf8')).name !== '@bytecodealliance/preview2-shim') shim = dirname(shim);
+mkdirSync('node_modules/@bytecodealliance', { recursive: true });
+symlinkSync(shim, 'node_modules/@bytecodealliance/preview2-shim', 'dir');
+const component = await import('./transpiled/guest.js');
+const api = component.numberApi;
+const host = await import('./host.mjs');
+assert.equal(component.addNumber(19, 23), 42);
+assert.equal(component.addNumber(-20, 22), 2);
+for (const text of ['', 'Привет 🌍', 'a\0b']) {
+  const packet = { text, bytes: new Uint8Array([0, 1, 127, 255]) };
+  assert.deepEqual(api.roundtrip(packet), packet);
+  assert.equal(api.maybe(text), text);
+  assert.equal(api.checked(text), text);
+  assert.deepEqual(api.useHost(packet), {text: text + ' ✓', bytes: new Uint8Array([255, 127, 1, 0])});
+}
+assert.deepEqual(api.roundtrip({text: '', bytes: new Uint8Array()}), {text: '', bytes: new Uint8Array()});
+assert.equal(api.maybe(undefined), undefined);
+assert.throws(() => api.checked('fail'), e => e.payload === 'guest-error');
+assert.throws(() => api.useHost({text: 'fail', bytes: new Uint8Array()}), e => e.payload === 'host-error');
+for (let i = 0; i < 3; i++) assert.equal(api.hostLifecycle(new Uint8Array([1, 2, 39])), 42);
+assert.equal(host.constructed, 3);
+assert.equal(host.dropped, 3);
+const counter = new api.Counter(19);
+assert.equal(api.droppedCounters(), 0);
+assert.equal(counter.add(23), 42);
+assert.equal(counter.get(), 42);
+counter[Symbol.dispose]();
+assert.equal(api.droppedCounters(), 1);
+assert.throws(() => counter.get());
+console.log('C# imports/exports/resources: 42');

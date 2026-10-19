@@ -10,6 +10,19 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `csharp` backend with WIT-generated user stubs, real C# bindings,
+  locked .NET/NuGet dependencies and verified Component Model publication,
+  using an experimental componentize-dotnet/NativeAOT-LLVM toolchain.
+  Supports direct world exports, interfaces, external versioned WIT packages and
+  synchronous resources, without a Tarantool dependency.
+- C# toolchain discovery/setup/selection/locks, cached compile-capability probe,
+  Linux amd64 Docker target and inclusion in the full `all` image. Pin .NET SDK
+  10.0.402, componentize-dotnet 0.8.0-preview00011, NativeAOT-LLVM
+  10.0.0-rc.1.26306.1, wit-bindgen 0.58.0 and WASI SDK 29.0. Local macOS builds
+  report the upstream compiler limitation and require an explicit Docker choice.
+- C# example and regression/integration coverage for bindings, locks, path
+  overrides, cleanup, failure recovery, Unicode, results and resource lifecycles.
+
 - Local/Docker toolchain selection, first-use discovery, per-tool versions and
   compatibility diagnostics, custom binary paths and images, and project locks.
 - `toolchain setup` plans or executes pinned installation for one language or

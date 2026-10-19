@@ -30,7 +30,7 @@ the host toolchain is undesirable.
 
 Keep WIT handling independent of a particular guest language. A change to a
 shared command or generated project should behave consistently for Python, Go,
-JavaScript, Rust, and C/C++ unless the difference is documented and covered by
+JavaScript, Rust, C/C++ and C# unless the difference is documented and covered by
 a language-specific test.
 
 Preserve the safety guarantees of generated projects: do not overwrite user

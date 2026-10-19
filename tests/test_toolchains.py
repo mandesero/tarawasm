@@ -10,7 +10,7 @@ from click.testing import CliRunner
 
 from tarawasm.cli import cli
 from tarawasm.toolchains import discovery, installer, runtime
-from tarawasm.toolchains.catalog import TOOLS, tools_for, version_status
+from tarawasm.toolchains.catalog import LANGUAGES, TOOLS, tools_for, version_status
 from tarawasm.toolchains.settings import (
     LOCK_FILE,
     ToolchainError,
@@ -235,8 +235,8 @@ def test_setup_all_install_checks_every_language(monkeypatch):
         cli, ["toolchain", "setup", "--all", "--mode", "docker", "--install", "--yes"]
     )
     assert result.exit_code == 1
-    assert len(calls) == 5
-    assert checked == ["python", "go", "js", "rust", "c"]
+    assert len(calls) == len(LANGUAGES)
+    assert checked == list(LANGUAGES)
 
 
 def test_unsupported_install_platform_fails_before_writes(monkeypatch, tmp_path):

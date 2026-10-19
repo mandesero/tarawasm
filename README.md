@@ -5,7 +5,7 @@
 [![Docker](https://github.com/mandesero/tarawasm/actions/workflows/docker.yaml/badge.svg)](https://github.com/mandesero/tarawasm/actions/workflows/docker.yaml)
 
 `tarawasm` turns a [WIT](https://component-model.bytecodealliance.org/design/wit.html)
-contract into a WebAssembly component. Python, Go, JavaScript, Rust, and C/C++
+contract into a WebAssembly component. Python, Go, JavaScript, Rust, C/C++ and C#
 projects all use the same three commands:
 
 ```console
@@ -122,7 +122,7 @@ image, and images without a local copy are reported as `not downloaded`.
 
 ## Language-specific Docker images
 
-`Dockerfile` has targets `base`, `python`, `go`, `js`, `rust`, `c`, and `all`.
+`Dockerfile` has targets `base`, `python`, `go`, `js`, `rust`, `c`, `csharp`, and `all`.
 The default `all` target preserves the previous full-image workflow. Language
 images copy only their required tools from the shared build stage. Build and
 use a local image before the toolchain image family has been published:
@@ -151,6 +151,83 @@ Project Python packages installed through the image entrypoint remain supported:
 ```console
 docker run --rm -v "$PWD:/work" -w /work tarawasm:python pip install -r requirements.txt
 ```
+
+## C# components with an experimental toolchain
+
+C# uses [componentize-dotnet](https://github.com/bytecodealliance/componentize-dotnet)
+and NativeAOT-LLVM. The pinned configuration is .NET SDK **10.0.402**,
+`BytecodeAlliance.Componentize.DotNet.Wasm.SDK` **0.8.0-preview00011**,
+NativeAOT-LLVM **10.0.0-rc.1.26306.1**, its C# `wit-bindgen` **0.58.0**,
+and a separate WASI SDK **29.0**. These upstream dependencies are experimental.
+The C backend continues to use its own WASI SDK version from the catalog.
+
+Compilation requires **Linux amd64**. This compiler does not support local
+macOS arm64 or amd64 builds. Running a finished component on macOS is separate
+from compiling it. Choose Docker explicitly on macOS; failures never change
+execution mode or architecture automatically:
+
+```sh
+docker buildx build --platform linux/amd64 --target csharp --load -t tarawasm:csharp .
+tarawasm toolchain use csharp --mode docker --image tarawasm:csharp
+tarawasm init --lang csharp --wit ./wit --world calculator .
+tarawasm bind
+tarawasm build
+```
+
+On Linux amd64, `toolchain setup csharp --mode local --install --yes` installs
+the pinned SDK, NuGet packages and WASI SDK under the managed data directory.
+It compiles and validates a probe component. `doctor --lang csharp --json`
+checks the SDK version, binding generator, WASI SDK version and a cached
+capability receipt tied to tool contents and the probe component. Presence of
+`dotnet` alone is insufficient. `toolchain list/status/setup/use/set/lock` and
+`--all` include C#. Consequently, `doctor --all` and local `setup --all` on
+macOS report the C# platform limitation; select Docker for C# separately.
+
+For C#, `source` and `build --src` identify a **`.csproj`**, not a `.cs` file or
+directory. The generated project compiles user files from its sibling
+`src/**/*.cs`. An alternate project needs the same tarawasm project settings,
+its own `global.json`, `nuget.config`, lock and sources. Docker mounts an
+external C# project directory read-only so these sibling inputs are visible;
+intermediates stay under the tarawasm project's `.tarawasm/build/csharp/`.
+
+`init` generates implementation files using the pinned generator's
+`--generate-stub`, including exact versioned namespaces, hyphenated names,
+keyword escaping and resource signatures. Replace the marked
+`NotImplementedException` bodies. Repeated `bind` and `build` never regenerate
+these user implementations. Bindings, NuGet download cache and compiler
+intermediates are separate generated artifacts. `clean` preserves the project,
+sources, WIT, imported components, SDK settings and NuGet lock.
+
+Both `bind` and `build` invoke the same pinned C# generator with UTF-8 strings,
+NativeAOT and `--with-wit-results`; MSBuild's automatic WIT generation is
+disabled to avoid duplicate bindings and its upstream path-quoting problem.
+`bind -- --internal` changes binding visibility. `build --` accepts MSBuild
+`-p:Name=Value`, verbosity options, `--no-incremental` and
+`--disable-build-servers`; output, ABI and lock settings remain managed.
+Builds disable persistent compiler servers and use one MSBuild worker so each
+operation owns its compiler state, including in unprivileged Docker containers.
+Use `--tool-help` to inspect the underlying generator or `dotnet build` help.
+`--world`, `--wit`, `--src`, `--out` and `--dry-run` follow the shared CLI rules.
+For external Docker inputs, use canonical absolute paths or paths relative to
+the project. Host path aliases such as macOS `/var` versus `/private/var` are
+not reproduced inside the container.
+
+Ordinary bind/build always restore with the committed lock and fail on a
+dependency mismatch. To change dependencies intentionally, edit the project
+and explicitly run `dotnet restore --use-lock-file --force-evaluate
+-p:RestoreLockedMode=false --configfile nuget.config`, then review and commit
+the new lock. NuGet feeds and .NET settings are scoped to the project or
+managed environment; global user configuration is not changed. Docker images
+contain a read-only package fallback cache and use writable caches owned by
+the invoking UID.
+
+Direct world functions, exported interfaces, versioned external WIT packages
+and synchronous resources use ordinary Component Model imports/exports.
+Imported resources implement `IDisposable`; use `using` to release them.
+Async WIT functions, `future`, `stream`, `error-context` and fixed-length lists
+are rejected with a diagnostic. C# support does not imply support for arbitrary
+.NET applications or the entire standard library. See the
+[C# example](examples/csharp/README.md) for build and execution instructions.
 
 ## Start in five minutes with Docker
 
@@ -193,6 +270,7 @@ Implement the generated functions, then run `tarawasm build` again.
 | JavaScript | `js` | `main.js` | `jco`, `componentize-js` |
 | Rust | `rust` | `src/lib.rs` | `cargo-component` |
 | C/C++ | `c` | `component.c` | `wit-bindgen`, WASI SDK, `wasm-tools` |
+| C# | `csharp` | `Component.csproj`, `src/*Impl.cs` | .NET, componentize-dotnet, NativeAOT-LLVM; experimental toolchain, Linux amd64 |
 
 TinyGo's `wasip2` target requires the selected Go world to import the complete
 versioned `wasi:cli/imports@0.2.x` world. Tarawasm checks the required WASI

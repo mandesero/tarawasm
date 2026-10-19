@@ -27,7 +27,8 @@
         "go",
         "js",
         "rust",
-        "c"
+        "c",
+        "csharp"
       ]
     },
     "wkg": {
@@ -43,7 +44,8 @@
         "go",
         "js",
         "rust",
-        "c"
+        "c",
+        "csharp"
       ]
     },
     "componentize-py": {
@@ -187,6 +189,19 @@
       "languages": [
         "js"
       ]
+    },
+    "dotnet": {
+      "minimum": "10.0.402",
+      "maximum_exclusive": "10.0.403",
+      "recommended": "10.0.402",
+      "version_args": [
+        "--version"
+      ],
+      "kind": "dotnet",
+      "languages": [
+        "csharp"
+      ],
+      "sha512": "1904a98dda2db34ba78ba3c4fb1b224455329af91c341d83547843c1839e112b04ae699ee92fa2449a8f62249196a938723078c0c60b9f65c88539d5687729c2"
     }
   },
   "packages": {
@@ -196,5 +211,12 @@
     "click": "8.5.0",
     "wasmtime": "49.0.2",
     "binaryen": "133"
+  },
+  "csharp": {
+    "sdk": "0.8.0-preview00011",
+    "llvm": "10.0.0-rc.1.26306.1",
+    "wit_bindgen": "0.58.0",
+    "wasi_sdk": "29.0",
+    "wasi_sha256": "87d1d1a2879d139cdc624b968efad3d4a97b8078cdff95e63ac88ecafd1a0171"
   }
 }

@@ -30,7 +30,8 @@ def test_host_routes_selected_docker_toolchain(tmp_path, language):
     env.pop("INSIDE_DOCKER", None)
     project = tmp_path / "project"
     project.mkdir()
-    fixture = root / f"examples/{language}/docs:adder@0.1.0.wasm"
+    fixture_language = "c" if language == "csharp" else language
+    fixture = root / f"examples/{fixture_language}/docs:adder@0.1.0.wasm"
     shutil.copy2(fixture, project / "input.wasm")
 
     def invoke(*args):

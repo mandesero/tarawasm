@@ -1,0 +1,22 @@
+package neutral:sample-api@1.2.3;
+
+interface number-api {
+    record packet { text: string, bytes: list<u8> }
+    roundtrip: func(value: packet) -> packet;
+    maybe: func(value: option<string>) -> option<string>;
+    checked: func(value: string) -> result<string, string>;
+    use-host: func(value: packet) -> result<packet, string>;
+    host-lifecycle: func(data: list<u8>) -> u32;
+    dropped-counters: func() -> u32;
+    resource counter {
+        constructor(initial-value: s32);
+        add: func(delta: s32) -> s32;
+        get: func() -> s32;
+    }
+}
+
+world my-world {
+    import neutral:provider/host-api@0.4.0;
+    export add-number: func(first-number: s32, second-number: s32) -> s32;
+    export number-api;
+}

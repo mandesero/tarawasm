@@ -12,7 +12,7 @@ STATE_DIR = Path(".tarawasm")
 BUILD_DIR = STATE_DIR / "build"
 IMPORTED_WIT_DIR = STATE_DIR / "imported-wit"
 DEFAULT_DIST_DIR = Path("dist")
-SUPPORTED_LANGUAGES = ("python", "go", "js", "rust", "c")
+SUPPORTED_LANGUAGES = ("python", "go", "js", "rust", "c", "csharp")
 
 _CONFIG_KEYS = {"language", "world", "wit", "source", "output"}
 _WIT_KEYS = {"path", "package"}

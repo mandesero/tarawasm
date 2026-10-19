@@ -1,0 +1,6 @@
+package example:calculator@0.1.0;
+
+world calculator {
+    export add: func(left: s32, right: s32) -> s32;
+    export echo: func(value: string) -> string;
+}

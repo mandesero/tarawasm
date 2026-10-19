@@ -132,6 +132,14 @@ def installation_plan(
     profiles: dict[str, dict] | None = None,
 ) -> list[str]:
     supported_host()
+    if "csharp" in languages:
+        from tarawasm.backends.base import BackendError
+        from tarawasm.csharp import require_platform
+
+        try:
+            require_platform()
+        except BackendError as exc:
+            raise ToolchainError(str(exc)) from exc
     profiles = profiles or {}
     reports = [
         discover_local(language, profiles.get(language)) for language in languages
@@ -398,6 +406,15 @@ def install_tools(names: list[str]) -> None:
             elif kind == "rust":
                 # bootstrap_rust prepared both compiler and WASI target.
                 continue
+            elif kind == "dotnet":
+                from tarawasm.backends.base import BackendError
+
+                from .csharp import install
+
+                try:
+                    install(root, temporary, env)
+                except BackendError as exc:
+                    raise ToolchainError(str(exc)) from exc
             elif kind == "pip":
                 python = root / "python/bin/python3"
                 if not python.is_file():
@@ -635,6 +652,12 @@ def prerequisite_commands(names: list[str]) -> list[list[str]]:
     if platform.system() != "Darwin":
         install = prerequisites_command()
         manager = linux_package_manager()
+        if "dotnet" in names:
+            install.extend(
+                ["libicu-dev", "libgssapi-krb5-2", "zlib1g"]
+                if manager == "apt-get"
+                else ["libicu", "krb5-libs", "zlib"]
+            )
         return (
             [install[: install.index(manager) + 1] + ["update"], install]
             if manager == "apt-get"

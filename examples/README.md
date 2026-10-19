@@ -1,7 +1,8 @@
 # Examples
 
-Each directory is a complete WIT-first project that builds the same `adder`
-world with a different language backend.
+Each directory is a complete WIT-first project. The first five build `adder`;
+the C# example builds a `calculator` library component using an experimental
+toolchain.
 
 | Example | Implementation | Notes |
 | --- | --- | --- |
@@ -10,6 +11,7 @@ world with a different language backend.
 | [JavaScript](js) | `main.js` | Built with `jco` and `componentize-js` |
 | [Rust](rust) | `src/lib.rs` | Built with `cargo-component` |
 | [C/C++](c) | `main.c` | Built with the WASI SDK and `wasm-tools` |
+| [C#](csharp) | `Component.csproj`, `src/*.cs` | Experimental NativeAOT-LLVM, Linux amd64 |
 
 ## Run a ready project
 

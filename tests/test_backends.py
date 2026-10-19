@@ -1,3 +1,4 @@
+import platform
 from pathlib import Path
 
 import pytest
@@ -34,14 +35,16 @@ def model(tmp_path):
 
 @pytest.mark.parametrize("language", backend_names())
 def test_each_backend_generates_from_actual_world_exports(language, model, tmp_path):
+    if language == "csharp" and platform.system() != "Linux":
+        pytest.skip("NativeAOT-LLVM C# generation is verified in Linux amd64 Docker")
     wit, world = model
     backend = get_backend(language)
     files = backend.initialize_files(world, wit, tmp_path)
     sources = "\n".join(
         content for content in files.values() if isinstance(content, str)
     )
-    assert "ping" in sources
-    assert "transform" in sources
+    assert "ping" in sources.lower()
+    assert "transform" in sources.lower()
     assert "counter" in sources.lower()
     assert "wasi:cli/run" not in sources
 

@@ -1,0 +1,9 @@
+package neutral:provider@0.4.0;
+interface host-api {
+    record host-packet { text: string, bytes: list<u8> }
+    transform: func(value: host-packet) -> result<host-packet, string>;
+    resource iterator {
+        constructor(data: list<u8>);
+        next: func() -> option<u8>;
+    }
+}

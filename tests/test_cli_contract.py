@@ -115,6 +115,9 @@ def test_bind_uses_backend_and_passthrough(tmp_path, monkeypatch):
     commands = []
 
     class FakeBackend:
+        def validate_bind_world(self, selected):
+            pass
+
         def bind_commands(self, loaded, **kwargs):
             captured.update(kwargs)
             assert loaded == conf
@@ -154,6 +157,16 @@ def test_bind_dry_run_does_not_invoke_tool_or_create_manifest(tmp_path, monkeypa
     assert result.exit_code == 0, result.output
     assert "Running:" in result.output
     assert not (tmp_path / ".tarawasm/artifacts.json").exists()
+
+
+def test_go_bind_does_not_require_build_time_wasi_imports(tmp_path, monkeypatch):
+    _write_project(tmp_path, monkeypatch, "go")
+    result = CliRunner().invoke(cli, ["bind", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert "wit-bindgen-go" in result.output
+    result = CliRunner().invoke(cli, ["build", "--dry-run"])
+    assert result.exit_code == 1
+    assert "complete versioned wasi:cli/imports" in result.output
 
 
 def test_component_import_is_first_class_and_does_not_track_original(

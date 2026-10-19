@@ -1,0 +1,12 @@
+package class:my-package@2.3.4;
+interface event {
+    record struct { class: string, params: list<u8> }
+    delegate: func(namespace: struct) -> struct;
+}
+world switch-world {
+    export class: func(params: string) -> string;
+    export event;
+    export alias-api: interface {
+        delegate: func(params: string) -> string;
+    }
+}

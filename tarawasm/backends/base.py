@@ -43,10 +43,18 @@ class LanguageBackend(ABC):
     def validate_world(self, world: WitWorld) -> None:
         """Reject WIT shapes the backend toolchain cannot build."""
 
+    def validate_bind_world(self, world: WitWorld) -> None:
+        """Reject unsupported bindings independently of build requirements."""
+
     def initialize_files(
         self, world: WitWorld, wit_path: Path, project_root: Path
     ) -> dict[Path, str | bytes]:
         return {self.default_source: self.generate_source(world)}
+
+    def initialize_from_import(
+        self, world: WitWorld, extracted: Path, final_wit: Path, project_root: Path
+    ) -> dict[Path, str | bytes]:
+        return self.initialize_files(world, final_wit, project_root)
 
     @abstractmethod
     def generate_source(self, world: WitWorld) -> str:
