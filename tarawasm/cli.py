@@ -179,6 +179,22 @@ cli.add_command(toolchain)
 cli.add_command(doctor)
 
 
+@cli.command(
+    name="_csharp",
+    hidden=True,
+    context_settings={"ignore_unknown_options": True, "help_option_names": []},
+)
+@click.argument("arguments", nargs=-1, type=click.UNPROCESSED)
+def csharp_tool(arguments):
+    """Internal argv driver, usable by both Python and the standalone binary."""
+    from tarawasm.csharp import main
+
+    try:
+        main(list(arguments))
+    except (BackendError, OSError, ValueError) as exc:
+        raise _fail(exc)
+
+
 @cli.command()
 @click.option(
     "--lang", "language", "-l", required=True, type=click.Choice(backend_names())
@@ -242,7 +258,9 @@ def init(
     source_paths = {
         path
         for path in files
-        if path.suffix in {".py", ".go", ".js", ".rs", ".c", ".cc", ".cpp"}
+        if path.suffix
+        in {".py", ".go", ".js", ".rs", ".c", ".cc", ".cpp", ".cs", ".csproj"}
+        or path.name in {"global.json", "nuget.config", "packages.lock.json"}
     }
     _install_project_files(root, files, force=force, sources=source_paths)
     click.echo(f"Configuration saved to '{root / CONFIG_FILE}'.")
@@ -320,7 +338,7 @@ def import_component(
             config_path=root / CONFIG_FILE,
         )
         try:
-            files = backend.initialize_files(selected, final_wit, root)
+            files = backend.initialize_from_import(selected, extracted, final_wit, root)
         except (BackendError, OSError) as exc:
             raise _fail(exc)
         for source_file in extracted.rglob("*"):
@@ -344,7 +362,11 @@ def import_component(
         source_paths = {
             path
             for path in files
-            if path.suffix in {".py", ".go", ".js", ".rs", ".c", ".cc", ".cpp"}
+            if (
+                path.suffix
+                in {".py", ".go", ".js", ".rs", ".c", ".cc", ".cpp", ".cs", ".csproj"}
+                or path.name in {"global.json", "nuget.config", "packages.lock.json"}
+            )
             and IMPORTED_WIT_DIR not in path.parents
         }
         _install_project_files(root, files, force=force, sources=source_paths)
@@ -510,13 +532,17 @@ def bind(
         raise _fail(exc)
     resolved_world = world or conf.world
     resolved_wit = conf.resolve_path(wit_path or conf.wit_path)
-    _parse_selected_world(resolved_wit, resolved_world)
-    commands = backend.bind_commands(
-        conf,
-        world=resolved_world,
-        wit=resolved_wit,
-        tool_args=list(tool_args),
-    )
+    selected = _parse_selected_world(resolved_wit, resolved_world)
+    try:
+        backend.validate_bind_world(selected)
+        commands = backend.bind_commands(
+            conf,
+            world=resolved_world,
+            wit=resolved_wit,
+            tool_args=list(tool_args),
+        )
+    except BackendError as exc:
+        raise _fail(exc)
     if tool_help:
         command = commands[-1]
         _run(Command((*command.argv, "--help"), command.env), check=False)

@@ -5,8 +5,9 @@ import pytest
 from utils import CLI_MODES, cli_mode_available, run_cli
 
 from tarawasm.backends import get_backend
+from tarawasm.config import SUPPORTED_LANGUAGES
 
-LANGUAGES = ("python", "go", "js", "rust", "c")
+LANGUAGES = SUPPORTED_LANGUAGES
 
 
 @pytest.mark.parametrize("mode", CLI_MODES, ids=lambda value: f"cli:{value}")
@@ -22,7 +23,7 @@ def test_import_bind_build(language, tmp_path, mode):
     fixture = (
         Path(__file__).resolve().parents[1]
         / "examples"
-        / language
+        / ("c" if language == "csharp" else language)
         / "docs:adder@0.1.0.wasm"
     )
     shutil.copy(fixture, tmp_path / "input.wasm")
@@ -47,7 +48,7 @@ def test_import_bind_build(language, tmp_path, mode):
 def test_wit_first_bind_build_in_docker(language, tmp_path):
     if not cli_mode_available("docker"):
         pytest.skip("Docker CLI mode is not available in this environment")
-    fixture = Path(__file__).resolve().parents[1] / "examples" / language / "wit"
+    fixture = Path(__file__).resolve().parents[1] / "examples" / ("c" if language == "csharp" else language) / "wit"
     shutil.copytree(fixture, tmp_path / "wit")
     run_cli(
         tmp_path,

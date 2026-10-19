@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "BytecodeAlliance.Componentize.DotNet.Wasm.SDK": {
+        "type": "Direct",
+        "requested": "[0.8.0-preview00011, 0.8.0-preview00011]",
+        "resolved": "0.8.0-preview00011",
+        "contentHash": "NuQGFMJug3lykTsX7869704q9ppw3biMO6A1XILRdKs4QDEGRXSliI9isoa3tjmKDnT6heYPeaWMficTebtR6Q==",
+        "dependencies": {
+          "BytecodeAlliance.Componentize.DotNet.WitBindgen": "0.8.0-preview00011",
+          "Microsoft.DotNet.ILCompiler.LLVM": "10.0.0-rc.1.26306.1"
+        }
+      },
+      "Microsoft.NET.ILLink.Tasks": {
+        "type": "Direct",
+        "requested": "[10.0.13, )",
+        "resolved": "10.0.13",
+        "contentHash": "40yrBMsLEcjixBR4G+FiUaBPvxXIPSKJ2OgSrbOZcmSDBda4Sb0k7BWrfDpIvn3IvvDzwOL/tEPa6gDQfh6aRw=="
+      },
+      "runtime.linux-x64.Microsoft.DotNet.ILCompiler.LLVM": {
+        "type": "Direct",
+        "requested": "[10.0.0-rc.1.26306.1, 10.0.0-rc.1.26306.1]",
+        "resolved": "10.0.0-rc.1.26306.1",
+        "contentHash": "Bxd4OmpsQvrOHUok4nX8B/+W1P8vvTBZumNCF4b17zP/Kq2CfL2YvyDDF2ggBru1dqHGO8KZTPHsH1mNx9QUiQ=="
+      },
+      "BytecodeAlliance.Componentize.DotNet.WitBindgen": {
+        "type": "Transitive",
+        "resolved": "0.8.0-preview00011",
+        "contentHash": "Fho78CbNzAoAKCS9PZwmGdpNKdawDDe104sw0dnd2r1RLQPM7qwOQhIPf/4ieCKPMjp034YvHnZ4TuEUc5expw=="
+      },
+      "Microsoft.DotNet.ILCompiler.LLVM": {
+        "type": "Transitive",
+        "resolved": "10.0.0-rc.1.26306.1",
+        "contentHash": "ivY3nUB+uoKDqnJt9De6B2eu1GR+LALm2ub5F7SkRjmgOt3LfMVbGizKZiboiXGWXuAxQx7Q3MIQo1bs6c4VFg=="
+      }
+    },
+    "net10.0/wasi-wasm": {
+      "Microsoft.DotNet.ILCompiler.LLVM": {
+        "type": "Transitive",
+        "resolved": "10.0.0-rc.1.26306.1",
+        "contentHash": "ivY3nUB+uoKDqnJt9De6B2eu1GR+LALm2ub5F7SkRjmgOt3LfMVbGizKZiboiXGWXuAxQx7Q3MIQo1bs6c4VFg==",
+        "dependencies": {
+          "runtime.wasi-wasm.Microsoft.DotNet.ILCompiler.LLVM": "10.0.0-rc.1.26306.1"
+        }
+      },
+      "runtime.wasi-wasm.Microsoft.DotNet.ILCompiler.LLVM": {
+        "type": "Transitive",
+        "resolved": "10.0.0-rc.1.26306.1",
+        "contentHash": "SdrXEFreL7s+ywk66CJwWvsZ170MTaIcBgJb1UPbDlizlbcOhbfZ3rpSuF+HllrGNxpkcZG8C+azBJ3Tp0BbmA=="
+      }
+    }
+  }
+}

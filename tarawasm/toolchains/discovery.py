@@ -32,6 +32,7 @@ def managed_environment() -> dict[str, str]:
         root / "opt/wasi-sdk/bin",
         root / "usr/local/lib/tinygo/bin",
         root / "cargo/bin",
+        root / "dotnet",
     ]
     env = os.environ.copy()
     env["PATH"] = (
@@ -46,6 +47,13 @@ def managed_environment() -> dict[str, str]:
 
 def local_environment(profile: dict, *, language: str | None = None) -> dict[str, str]:
     env = managed_environment()
+    if language == "csharp":
+        env.update(
+            DOTNET_CLI_TELEMETRY_OPTOUT="1",
+            DOTNET_SKIP_FIRST_TIME_EXPERIENCE="1",
+            DOTNET_NOLOGO="1",
+        )
+        env.setdefault("DOTNET_CLI_HOME", str(data_home() / "csharp/dotnet-home"))
     parents = list(
         dict.fromkeys(
             str(Path(path).parent) for path in profile.get("tools", {}).values()
@@ -320,6 +328,10 @@ def _discover_local(language: str, profile: dict, env: dict[str, str]) -> dict:
                         status=version_status(name, version),
                         detail="found",
                     )
+                    if name == "dotnet" and row["status"] == "ready":
+                        from .csharp import capability
+
+                        row.update(capability(path, env))
                     if name == "tinygo" and row["status"] == "ready":
                         optimizer = optimizer_report(path, version, env)
                         row.update(
@@ -372,6 +384,16 @@ def _discover_local(language: str, profile: dict, env: dict[str, str]) -> dict:
             except (ToolchainError, OSError, ValueError, KeyError) as exc:
                 row.update(status="unavailable", detail=str(exc))
         rows.append(row)
+    if language == "csharp":
+        from tarawasm.backends.base import BackendError
+        from tarawasm.csharp import require_platform
+
+        try:
+            require_platform()
+        except BackendError as exc:
+            for row in rows:
+                if row["tool"] == "dotnet":
+                    row.update(status="incompatible", detail=str(exc))
     return {
         "language": language,
         "mode": "local",

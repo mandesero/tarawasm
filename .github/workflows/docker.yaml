@@ -73,7 +73,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [python, go, js, rust, c]
+        language: [python, go, js, rust, c, csharp]
     steps:
       - uses: actions/checkout@v3
       - uses: docker/setup-buildx-action@v2

@@ -1,5 +1,6 @@
 from .base import BackendError, Command, LanguageBackend
 from .c import CBackend
+from .csharp import CSharpBackend
 from .go import GoBackend
 from .javascript import JavaScriptBackend
 from .python import PythonBackend
@@ -13,6 +14,7 @@ _BACKENDS: dict[str, LanguageBackend] = {
         JavaScriptBackend(),
         RustBackend(),
         CBackend(),
+        CSharpBackend(),
     )
 }
 

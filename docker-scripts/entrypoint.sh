@@ -1,6 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
+# Runtime caches belong to the selected UID; compiler/SDK caches in /opt are
+# read-only fallback packages. Project builds use their own writable NuGet cache.
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
+export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+export DOTNET_NOLOGO=1
+
 # Host-side execution can use an arbitrary working directory rather than /work.
 # Give unprivileged compiler tools a writable home without mounting host homes.
 if [ "${HOME:-}" = "/tmp/tarawasm-home" ]; then
@@ -40,6 +46,9 @@ if [ "$(id -u)" -eq 0 ] && [ -d /work ]; then
             "$0" "$@"
     fi
 fi
+
+export DOTNET_CLI_HOME="${DOTNET_CLI_HOME:-/tmp/tarawasm-dotnet-$(id -u)}"
+mkdir -p "$DOTNET_CLI_HOME"
 
 PERSISTENT_PY_SITE="${TARAWASM_PY_SITE_PACKAGES:-/work/.tarawasm/site-packages}"
 if ! mkdir -p "$PERSISTENT_PY_SITE" 2>/dev/null; then

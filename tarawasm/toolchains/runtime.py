@@ -130,7 +130,15 @@ def docker_command(
     params = context.params
     for key in ("wit_path", "component", "source", "wasm"):
         if params.get(key):
-            add(Path(params[key]), False)
+            explicit = Path(params[key])
+            add(
+                (
+                    explicit.parent
+                    if language == "csharp" and key == "source"
+                    else explicit
+                ),
+                False,
+            )
     if params.get("project_dir"):
         add(Path(params["project_dir"]), True)
     if params.get("output"):
@@ -144,7 +152,8 @@ def docker_command(
             and not params.get("dry_run", False)
         )
         add(conf.resolve_path(conf.wit_path), resolving)
-        add(conf.resolve_path(conf.source), False)
+        source = conf.resolve_path(conf.source)
+        add(source.parent if language == "csharp" else source, False)
         add(conf.resolve_path(conf.output), True)
     # strip forwards arbitrary output flags; make explicit destinations visible.
     extra = context.args
