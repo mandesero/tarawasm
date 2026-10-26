@@ -10,6 +10,10 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Integration coverage for a wheel-installed CLI using a Docker Python toolchain:
+  host-only packages stay isolated, while container-installed project packages
+  remain available after cleanup and across fresh build containers.
+
 - Python wheel/source packaging with the `tarawasm` console command and a
   GitHub release workflow for PyPI Trusted Publishing.
 
@@ -46,6 +50,10 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   tagged releases as `{git-tag}-{language}`, avoiding overwrites of catalog
   release tags. New default Docker selections use `latest-{language}`;
   existing explicit selections and digest locks are preserved.
+
+- Document dependency installation for pip CLI with Docker toolchains separately
+  from the Full-Docker shell function, including project-local Python/JavaScript
+  installs and all supported language workflows.
 
 - Reorganize the README around pip/local or Docker toolchains and full Docker,
   with a shared quick start, language notes and a separate usage reference.
