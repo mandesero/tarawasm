@@ -47,6 +47,9 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   release tags. New default Docker selections use `latest-{language}`;
   existing explicit selections and digest locks are preserved.
 
+- Reorganize the README around pip/local or Docker toolchains and full Docker,
+  with a shared quick start, language notes and a separate usage reference.
+
 - Recommend Go 1.27.2 and TinyGo 0.43.0 with Binaryen 133. Keep TinyGo 0.42
   compatible with Binaryen 116, and preserve user-selected build flags and the
   ordinary asyncify build mode.
