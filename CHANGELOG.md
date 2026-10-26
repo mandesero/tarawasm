@@ -39,6 +39,11 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Publish language toolchain images from master as `latest-{language}` and
+  tagged releases as `{git-tag}-{language}`, avoiding overwrites of catalog
+  release tags. New default Docker selections use `latest-{language}`;
+  existing explicit selections and digest locks are preserved.
+
 - Recommend Go 1.27.2 and TinyGo 0.43.0 with Binaryen 133. Keep TinyGo 0.42
   compatible with Binaryen 116, and preserve user-selected build flags and the
   ordinary asyncify build mode.

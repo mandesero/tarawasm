@@ -132,8 +132,12 @@ docker buildx build --platform linux/amd64 --target python --load -t tarawasm:py
 tarawasm toolchain use python --mode docker --image tarawasm:python
 ```
 
-The default release references are maintained in
-`tarawasm/toolchains/catalog.json`; publication is a separate release step.
+By default, toolchain setup selects `mandeser0/tarawasm:latest-{language}`
+(for example, `latest-python`), published after checks on pushes to `master`.
+Git tags publish `{git-tag}-{language}` (for example, `v0.4.0-python`) without
+updating `latest` or older release tags. Select a release explicitly with
+`toolchain use python --mode docker --image mandeser0/tarawasm:v0.4.0-python`.
+Existing saved image selections and digest locks remain unchanged.
 All current language images target `linux/amd64`. On an ARM host Docker must
 support running that platform. Existing installed tools may be newer when they
 satisfy supported ranges; version ranges also include upper bounds where
