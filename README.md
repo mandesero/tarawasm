@@ -18,7 +18,16 @@ The result is a validated Component Model binary at `dist/calculator.wasm`.
 
 ## Select a build environment
 
-The lightweight CLI needs Python 3.10+ and Click. Run it from a checkout:
+The lightweight CLI needs Python 3.10+. Once a release is published to PyPI:
+
+```sh
+python3 -m pip install tarawasm
+tarawasm --help
+```
+
+The package installs the CLI and Click. Language compilers and binding generators
+are prepared separately with `tarawasm toolchain setup` as described below.
+For development, run it from a checkout:
 
 ```sh
 python3 -m pip install -r requirements.txt
