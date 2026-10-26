@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "image_release": "v0.3.0-toolchains2",
+  "image_release": "latest",
   "docker_platform": "linux/amd64",
   "tools": {
     "python3": {
