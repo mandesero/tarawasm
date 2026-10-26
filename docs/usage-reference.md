@@ -9,6 +9,7 @@
 - [Selection, custom tools and locks](#selection-custom-tools-and-locks)
 - [CI setup](#ci-setup)
 - [Docker images](#docker-images)
+- [Packages with pip CLI and Docker toolchains](#packages-with-pip-cli-and-docker-toolchains)
 - [Python packages and paths](#python-packages-and-paths)
 - [JavaScript dependencies and features](#javascript-dependencies-and-features)
 - [Go toolchain and bindings](#go-toolchain-and-bindings)
@@ -143,12 +144,17 @@ Default language image references are defined in
 `latest-{language}` after verification. Git tags publish `{git-tag}-{language}`
 without updating `latest` or older release tags. Select a release explicitly
 with `toolchain use python --mode docker --image mandeser0/tarawasm:v0.4.0-python`
-(using an available release tag). Saved selections and digest locks are preserved. All images target `linux/amd64`; ARM hosts require
+(using an available release tag). Saved selections and digest locks are preserved.
+All images target `linux/amd64`; ARM hosts require
 Docker's emulation support.
 
-For package commands and direct tools in Docker, this guide assumes the
-[`tarawasm` shell helper from the README](../README.md#2-run-entirely-in-docker).
-For example, `tarawasm npm install` runs npm inside the full image.
+The pip-installed CLI routes `bind` and `build` to the selected toolchain, but
+has no `pip`, `npm`, `go`, `cargo` or `dotnet` subcommands. For dependency
+management, invoke the package tool in that same image as described below.
+
+The [`tarawasm` shell function](../README.md#2-run-entirely-in-docker) belongs to
+**Full Docker**. It replaces the local command in that shell; it is not needed
+for pip CLI + Docker toolchains.
 
 ### Paths and ownership
 
@@ -175,17 +181,171 @@ tarawasm toolchain use python --mode docker --image tarawasm:python
 Dockerfile targets: `base`, `python`, `go`, `js`, `rust`, `c`, `csharp`, `all`.
 The default `all` target includes every language toolchain.
 
+## Packages with pip CLI and Docker toolchains
+
+Run these commands from the project root. Keep the pip-installed `tarawasm`
+command; do not define the Full-Docker shell function in this shell.
+
+### Choose an image for container package commands
+
+Pure Python and JavaScript dependencies can be installed into the project on the
+host, as shown below. When a package command needs to run in Docker, use the
+same image as the selected build toolchain:
+
+```sh
+toolchain_image=mandeser0/tarawasm:latest-python
+tarawasm toolchain use python --mode docker --image "$toolchain_image"
+```
+
+Replace `python` and the image suffix for another language. If a toolchain is
+already selected, `tarawasm toolchain status python` shows its image. Use that
+same reference (or locked digest) for package commands.
+
+| Language | Dependency declaration | What the Docker build uses |
+| --- | --- | --- |
+| Python | `requirements.txt` | Packages installed in project `.tarawasm/site-packages` |
+| JavaScript | `package.json`, `package-lock.json` | Project `node_modules`, bundled by Jco |
+| Go | `go.mod`, `go.sum` | Go resolves modules in the container |
+| Rust | `Cargo.toml`, `Cargo.lock` | Cargo resolves crates in the container |
+| C/C++ | Project sources, headers, WASI libraries | Files supplied to the WASI compiler through build options |
+| C# | `.csproj`, `nuget.config`, `packages.lock.json` | Locked NuGet restore inside the container |
+
+Host Python packages and host Go/Cargo/NuGet caches are not forwarded. Keep local
+path dependencies inside the project mounted at `/work` for package commands.
+Use Wasm-compatible libraries; host-native extensions and libraries are not
+portable to a Wasm component.
+
+### Python: install requirements
+
+For pure Python packages, run local pip from the project root:
+
+```sh
+pip install --target .tarawasm/site-packages -r requirements.txt
+tarawasm build
+```
+
+The CLI mounts the project directory into every Docker build and adds
+`.tarawasm/site-packages` to the module search path. Packages persist across
+containers and after `tarawasm clean`. Installing into the host's normal
+`site-packages` does not make a package available to the container.
+
+**Alternative: install in the selected image.** This uses the same project
+package directory without requiring host pip for dependency installation:
+
+```sh
+docker run --rm --platform linux/amd64 \
+  -v "$PWD:/work" -w /work "$toolchain_image" \
+  pip install -r requirements.txt
+tarawasm build
+```
+
+`--target` only selects a directory; it does not cross-compile dependencies or
+select Wasm wheels. Host-native extensions cannot be reused in a Wasm component.
+Installing through the container avoids host OS installation differences, but
+does not make arbitrary Linux native wheels Wasm-compatible either.
+
+### JavaScript: install npm packages
+
+Pure JavaScript dependencies can be installed locally in the project:
+
+```sh
+npm ci
+tarawasm build
+```
+
+Use `npm install PACKAGE` when adding a dependency or `npm install` when there
+is no lock file yet. Review the updated `package.json` and lock. Docker builds
+read the project's `node_modules`; they do not use globally installed host npm
+packages.
+
+**Alternative: run installation scripts in the selected JS image.** Use this
+when installation depends on tools or platform-specific files from that image:
+
+```sh
+docker run --rm --platform linux/amd64 \
+  -v "$PWD:/work" -w /work "$toolchain_image" npm ci
+tarawasm build
+```
+
+Declarations and `node_modules` remain in the mounted project. Native Node
+addons still require appropriate Wasm support; a host or Linux binary is not a
+portable JavaScript dependency.
+
+### Go: update modules, then build
+
+Select the `go` toolchain/image and declare dependencies in `go.mod`:
+
+```sh
+tarawasm build
+```
+
+The Go tools resolve modules inside the build container. There is no need to
+copy the host module cache into a project package directory.
+
+To add a module with the Go tool, invoke `go get MODULE@VERSION` in the selected
+image using the Docker command pattern above. `go mod download` can also fetch
+modules there explicitly, but the container cache is temporary. Review and commit
+`go.mod`/`go.sum`. Fresh build containers may download modules again; downloading to the host Go cache does not prepare the container.
+
+### Rust: declare crates, then build
+
+Select the `rust` toolchain/image. Add dependencies under `[dependencies]` in
+`Cargo.toml`, including project-relative `path` dependencies when needed:
+
+```sh
+tarawasm build
+```
+
+Cargo fetches and compiles crates inside the container. To refresh the lock
+intentionally, run `cargo update` through the same Docker invocation pattern.
+Host Cargo caches and host-built libraries are not used.
+
+### C/C++: provide sources and headers
+
+Select the `c` toolchain/image. Tarawasm does not include a C/C++ package manager.
+Vendor dependencies under the project and pass compiler/linker inputs:
+
+```sh
+tarawasm build -- -Ivendor/include vendor/helper.c
+```
+
+After `clean`, run `tarawasm bind` before building again to regenerate bindings.
+Prebuilt libraries must target WASI and match the selected SDK/ABI. Installing a
+native library with the host package manager does not make it usable in Wasm.
+
+### C#: update NuGet packages and lock explicitly
+
+Select the `csharp` toolchain/image. Add a `PackageReference` to the `.csproj`
+and configure any extra feeds in `nuget.config`. Intentionally regenerate the
+lock using the same image:
+
+```sh
+docker run --rm --platform linux/amd64 \
+  -v "$PWD:/work" -w /work "$toolchain_image" \
+  dotnet restore Component.csproj --use-lock-file --force-evaluate \
+  -p:RestoreLockedMode=false --configfile nuget.config
+tarawasm build
+```
+
+Use packages compatible with WASI, NativeAOT and trimming. Review and commit
+the changed project and `packages.lock.json`. Ordinary
+`bind`/`build` restores with the lock and rejects a mismatch. Local feed folders
+and project references must be visible inside the mounted project. The host's
+NuGet cache is not used; build containers keep their own project-local cache.
+
 ## Python packages and paths
 
 | Mode | Install component dependencies |
 | --- | --- |
-| Local | `python3 -m pip install -r requirements.txt` in the build Python environment |
-| Docker helper | `tarawasm pip install -r requirements.txt` |
+| Local toolchain | `python3 -m pip install -r requirements.txt` in the Python environment used by the selected `componentize-py` |
+| pip CLI + Docker toolchain | `pip install --target .tarawasm/site-packages -r requirements.txt` for pure Python packages; [container alternative](#python-install-requirements) |
+| Full Docker | `tarawasm pip install -r requirements.txt` via the helper |
 
-Docker packages persist under `.tarawasm/site-packages`. To change that location,
-pass the same `TARAWASM_PY_SITE_PACKAGES` into every install and build container.
-The pip-installed CLI has no `pip` subcommand; Docker package commands use the
-shell helper.
+Docker packages persist under `.tarawasm/site-packages`; pip CLI + Docker uses
+that project directory. With the Full-Docker shell function, a custom location
+can be passed as `TARAWASM_PY_SITE_PACKAGES` into every install/build container.
+The local pip CLI has no `pip` subcommand; `tarawasm pip …` in the Full-Docker
+variant is handled by the shell function and image entrypoint.
 
 For source files outside the project root:
 
@@ -201,7 +361,8 @@ dependencies. Packages must be compatible with the Wasm build environment.
 
 ### Packages and bundling
 
-Install with local npm, or use the Docker helper:
+For pip CLI + Docker, use the [npm installation recipe](#javascript-install-npm-packages).
+With the Full-Docker shell function:
 
 ```sh
 tarawasm npm install ./sdk.tgz
@@ -362,7 +523,8 @@ dotnet restore --use-lock-file --force-evaluate \
   -p:RestoreLockedMode=false --configfile nuget.config
 ```
 
-With the full-Docker helper, prefix that command with `tarawasm`.
+For pip CLI + Docker, use the [restore command in the selected image](#c-update-nuget-packages-and-lock-explicitly).
+With the Full-Docker shell function, prefix the command with `tarawasm`.
 NuGet feeds and .NET settings are scoped to the project or managed environment.
 Docker uses a read-only package fallback cache and UID-owned writable caches.
 
