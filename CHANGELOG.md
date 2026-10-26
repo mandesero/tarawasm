@@ -6,7 +6,7 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-- Preserve WIT dependency locks on failed resolution/update and require explicit migration of legacy nested locks for wkg 0.16.1.
+## [0.4.0] - 2026-10-26
 
 ### Added
 
@@ -87,6 +87,9 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dpkg-deb on RPM systems.
 
 ### Fixed
+
+- Preserve WIT dependency locks on failed resolution/update and require explicit
+  migration of legacy nested locks for wkg 0.16.1.
 
 - Go scaffolds preserve hyphenated WIT import paths, qualify named world and
   interface types, and match the tuple/result representations of wit-bindgen-go
