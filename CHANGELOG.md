@@ -10,6 +10,9 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Python wheel/source packaging with the `tarawasm` console command and a
+  GitHub release workflow for PyPI Trusted Publishing.
+
 - `csharp` backend with WIT-generated user stubs, real C# bindings,
   locked .NET/NuGet dependencies and verified Component Model publication,
   using an experimental componentize-dotnet/NativeAOT-LLVM toolchain.
