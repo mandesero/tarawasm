@@ -109,6 +109,10 @@ class JavaScriptBackend(LanguageBackend):
             for resource in resources:
                 lines.append(f"    {pascal(resource)},")
             lines.extend(["};", ""])
+        if not lines:
+            # Jco's bundler omits an empty module; retain a JS-only default export.
+            # The WIT world still determines the component's exports.
+            lines.append("export default {};")
         return "\n".join(lines).rstrip() + "\n"
 
     def bind_command(self, conf, *, world, wit, tool_args):

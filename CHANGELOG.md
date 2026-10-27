@@ -6,6 +6,13 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix starter generation for minimal WIT worlds across Python, Go, Rust and
+  JavaScript: avoid missing Python interface bindings, unused Go interface
+  imports and absent Rust export macros; keep empty JavaScript modules
+  available to Jco's bundler.
+
 ## [0.4.0] - 2026-10-26
 
 ### Added
