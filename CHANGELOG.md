@@ -8,6 +8,8 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Generate C destructors and Rust resource implementations for exported resources
+  without constructors or methods.
 - Render single-element WIT tuples as Rust tuple types in generated starters.
 - Match C binding filenames for WIT worlds with hyphenated names.
 - Fix starter generation for minimal WIT worlds across Python, Go, Rust and

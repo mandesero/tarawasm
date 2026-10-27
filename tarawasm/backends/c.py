@@ -127,11 +127,9 @@ class CBackend(LanguageBackend):
                 package = item.interface.package.split("@", 1)[0].replace(":", "_")
                 prefix = f"exports_{snake(package)}_{snake(item.interface.name)}"
                 resources = sorted(
-                    {
-                        function.resource
-                        for function in item.interface.functions
-                        if function.resource is not None
-                    }
+                    t.name
+                    for t in item.interface.types
+                    if t.kind == "resource" and t.name
                 )
                 for resource in resources:
                     lines.extend(
