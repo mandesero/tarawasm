@@ -33,7 +33,8 @@ def _rust_type(value: WitType, module: str = "bindings") -> str:
     if value.kind == "option":
         return f"Option<{_rust_type(value.value, module)}>"
     if value.kind == "tuple":
-        return f"({', '.join(_rust_type(item, module) for item in value.value)})"
+        items = ", ".join(_rust_type(item, module) for item in value.value)
+        return f"({items}{',' if len(value.value) == 1 else ''})"
     if value.kind == "result":
         ok, err = value.value
         ok_type = "()" if ok is None else _rust_type(ok, module)
