@@ -8,6 +8,7 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Keep same-named resources in separate JavaScript and Rust interface scopes.
 - Generate C destructors and Rust resource implementations for exported resources
   without constructors or methods.
 - Render single-element WIT tuples as Rust tuple types in generated starters.

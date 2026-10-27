@@ -73,27 +73,27 @@ class JavaScriptBackend(LanguageBackend):
             resources = sorted(
                 {f.resource for f in interface.functions if f.resource is not None}
             )
+            lines.append(f"export const {camel(interface.name)} = {{")
             for resource in resources:
-                lines.append(f"class {pascal(resource)} {{")
+                lines.append(f"    {pascal(resource)}: class {{")
                 for function in [
                     f for f in interface.functions if f.resource == resource
                 ]:
                     args = [camel(p.name) for p in function.params if p.name != "self"]
                     if function.kind == "constructor":
-                        declaration = f"    constructor({', '.join(args)}) {{"
+                        declaration = f"        constructor({', '.join(args)}) {{"
                     elif function.kind == "static":
-                        declaration = f"    static {camel(function.name.split('.')[-1])}({', '.join(args)}) {{"
+                        declaration = f"        static {camel(function.name.split('.')[-1])}({', '.join(args)}) {{"
                     else:
-                        declaration = f"    {camel(function.name.split('.')[-1])}({', '.join(args)}) {{"
+                        declaration = f"        {camel(function.name.split('.')[-1])}({', '.join(args)}) {{"
                     lines.extend(
                         [
                             declaration,
-                            f'        throw new Error("TODO: implement WIT item {function.name}");',
-                            "    }",
+                            f'            throw new Error("TODO: implement WIT item {function.name}");',
+                            "        }",
                         ]
                     )
-                lines.extend(["}", ""])
-            lines.append(f"export const {camel(interface.name)} = {{")
+                lines.append("    },")
             for function in interface.functions:
                 if function.kind != "freestanding":
                     continue
@@ -106,8 +106,6 @@ class JavaScriptBackend(LanguageBackend):
                         "    },",
                     ]
                 )
-            for resource in resources:
-                lines.append(f"    {pascal(resource)},")
             lines.extend(["};", ""])
         if not lines:
             # Jco's bundler omits an empty module; retain a JS-only default export.

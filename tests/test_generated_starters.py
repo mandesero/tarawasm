@@ -19,11 +19,16 @@ EXPORTS = {
     "resource-interface": "export handles;",
     "type-interface": "export data;",
     "singleton-tuple": "export roundtrip: func(value: tuple<u32>) -> tuple<u32>;",
+    "resource-names": "export first; export first-foo;",
 }
 
 
 class EmptyInterfaceCompilerError(RuntimeError):
     """The specific upstream failure, excluding tarawasm init/bind regressions."""
+
+
+class DuplicateResourceCompilerError(RuntimeError):
+    """ComponentizeJS redeclares resource names in its initializer."""
 
 
 @pytest.mark.parametrize("mode", CLI_MODES, ids=lambda value: f"cli:{value}")
@@ -55,6 +60,16 @@ class EmptyInterfaceCompilerError(RuntimeError):
     ]
     + [(language, "resource-interface") for language in ("go", "rust", "c")]
     + [
+        pytest.param(
+            "js",
+            "resource-names",
+            marks=pytest.mark.xfail(
+                reason="ComponentizeJS: duplicate resource names in initializer.js",
+                raises=DuplicateResourceCompilerError,
+                strict=True,
+            ),
+        ),
+        ("rust", "resource-names"),
         ("go", "type-interface"),
         ("rust", "singleton-tuple"),
     ],
@@ -84,6 +99,8 @@ def test_generated_starter_builds(tmp_path, mode, language, exports, capfd):
         "interface marker {}\n"
         "interface handles { resource token; }\n"
         "interface data { record point { x: s32 } }\n"
+        "interface first { resource token { constructor(); } resource foo-token { constructor(); } }\n"
+        "interface first-foo { resource token { constructor(); } }\n"
         f"world {world} {{ {imports}\n{EXPORTS[exports]} }}\n"
     )
     run_cli(
@@ -104,6 +121,12 @@ def test_generated_starter_builds(tmp_path, mode, language, exports, capfd):
     try:
         run_cli(tmp_path, "build", mode=mode)
     except subprocess.CalledProcessError as exc:
+        if language == "js" and exports == "resource-names":
+            captured = capfd.readouterr()
+            diagnostic = "redeclaration of let Token"
+            if "initializer.js" in captured.err and diagnostic in captured.err:
+                raise DuplicateResourceCompilerError(diagnostic) from exc
+            raise AssertionError(captured.out + captured.err) from exc
         if language == "python" and exports == "empty-interface":
             captured = capfd.readouterr()
             diagnostic = "unknown component 1: component index out of bounds"

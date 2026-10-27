@@ -212,12 +212,11 @@ world names {
     for declaration in (
         "export function addNumber(firstNumber)",
         "export const numberApi",
-        "class NumberBox",
+        "NumberBox: class",
         "constructor(initialValue)",
         "getNumber()",
         "static fromNumber(initialValue)",
         "addNumber: (firstNumber)",
-        "    NumberBox,",
     ):
         assert declaration in source
 
