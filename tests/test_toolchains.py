@@ -456,6 +456,38 @@ def test_docker_working_directory_root_is_rejected(monkeypatch):
         runtime.docker_command({"mode": "docker"}, "python", context, None)
 
 
+@pytest.mark.parametrize("absolute", [False, True])
+def test_docker_path_arguments_preserve_relative_and_passthrough(
+    tmp_path, monkeypatch, absolute
+):
+    work = tmp_path / "work"
+    work.mkdir()
+    target = tmp_path / "external"
+    target.mkdir()
+    alias = tmp_path / "link"
+    alias.symlink_to(target, target_is_directory=True)
+    monkeypatch.chdir(work)
+    value = (
+        str(alias / "new component.wasm") if absolute else "../link/new component.wasm"
+    )
+    context = click.Context(
+        cli.commands["build"], parent=click.Context(cli), info_name="build"
+    )
+    context.params = {"output": Path(value), "tool_args": ("--example", value)}
+    context.args = ["--raw", value]
+    expected = str(target / "new component.wasm") if absolute else value
+    assert runtime.command_arguments(context) == [
+        "build",
+        "--out",
+        expected,
+        "--",
+        "--example",
+        value,
+        "--raw",
+        value,
+    ]
+
+
 def test_external_strip_default_output_parent_is_writable(tmp_path, monkeypatch):
     work = tmp_path / "work"
     work.mkdir()
