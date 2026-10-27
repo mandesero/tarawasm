@@ -131,7 +131,7 @@ world = "{world.name}"
             )
             functions = [f for f in interface.functions if f.kind == "freestanding"]
             resources = sorted(
-                {f.resource for f in interface.functions if f.resource is not None}
+                t.name for t in interface.types if t.kind == "resource" and t.name
             )
             if functions or resources:
                 lines.append(f"impl {module}::Guest for Component {{")

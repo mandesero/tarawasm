@@ -53,8 +53,8 @@ class EmptyInterfaceCompilerError(RuntimeError):
             ),
         )
     ]
+    + [(language, "resource-interface") for language in ("go", "rust", "c")]
     + [
-        ("go", "resource-interface"),
         ("go", "type-interface"),
         ("rust", "singleton-tuple"),
     ],
