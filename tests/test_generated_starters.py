@@ -18,6 +18,7 @@ EXPORTS = {
     "empty-interface": "export marker;",
     "resource-interface": "export handles;",
     "type-interface": "export data;",
+    "singleton-tuple": "export roundtrip: func(value: tuple<u32>) -> tuple<u32>;",
 }
 
 
@@ -52,7 +53,11 @@ class EmptyInterfaceCompilerError(RuntimeError):
             ),
         )
     ]
-    + [("go", "resource-interface"), ("go", "type-interface")],
+    + [
+        ("go", "resource-interface"),
+        ("go", "type-interface"),
+        ("rust", "singleton-tuple"),
+    ],
 )
 def test_generated_starter_builds(tmp_path, mode, language, exports, capfd):
     if not cli_mode_available(mode):
