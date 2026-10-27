@@ -60,6 +60,11 @@ def test_host_routes_selected_docker_toolchain(tmp_path, language):
     if language == "python":
         external_wit = tmp_path / "external-wit"
         shutil.copytree(project / ".tarawasm/imported-wit", external_wit)
+        alias = tmp_path / "wit-alias"
+        alias.symlink_to(external_wit, target_is_directory=True)
+        invoke(
+            "init", "--lang", "python", "--wit", str(alias), str(project / "from-alias")
+        )
         config_path = project / "tarawasm.json"
         config = json.loads(config_path.read_text())
         config["wit"]["path"] = str(external_wit)

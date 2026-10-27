@@ -87,7 +87,10 @@ def test_command_paths_src_and_out_are_single_arguments(tmp_path):
         )
 
 
-def test_docker_mounts_external_csproj_siblings_readonly(tmp_path, monkeypatch):
+@pytest.mark.parametrize("absolute", [False, True])
+def test_docker_mounts_external_csproj_siblings_readonly(
+    tmp_path, monkeypatch, absolute
+):
     import click
 
     from tarawasm.toolchains.runtime import docker_command
@@ -98,6 +101,8 @@ def test_docker_mounts_external_csproj_siblings_readonly(tmp_path, monkeypatch):
     external.mkdir()
     source = external / "Library.csproj"
     source.write_text("<Project />")
+    alias = tmp_path / "linked.csproj"
+    alias.symlink_to(source)
     conf = Config(
         "csharp",
         "world",
@@ -110,11 +115,15 @@ def test_docker_mounts_external_csproj_siblings_readonly(tmp_path, monkeypatch):
     conf.save()
     monkeypatch.chdir(root)
     context = click.Context(cli.commands["build"], info_name="build")
-    context.params = {"source": source}
+    context.params = {"source": alias if absolute else Path("../linked.csproj")}
     argv = docker_command(
         {"mode": "docker", "image": "task:csharp"}, "csharp", context, root
     )
-    assert f"type=bind,source={external},target={external},readonly" in argv
+    mounted = external if absolute else tmp_path
+    assert f"type=bind,source={mounted},target={mounted},readonly" in argv
+    assert argv[argv.index("--src") + 1] == (
+        str(source) if absolute else "../linked.csproj"
+    )
     assert not any("source=/," in value for value in argv)
 
 

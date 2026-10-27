@@ -8,6 +8,8 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Resolve absolute CLI path aliases consistently with Docker mounts, including
+  external WIT paths and linked C# project files.
 - Escape keyword identifiers in Python, JavaScript and Rust starters without
   changing their public WIT exports.
 - Keep same-named resources in separate JavaScript and Rust interface scopes.

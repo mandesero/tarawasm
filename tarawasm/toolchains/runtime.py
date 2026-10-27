@@ -55,11 +55,13 @@ def command_arguments(context: click.Context) -> list[str]:
         ancestors.append(str(parent.info_name))
         parent = parent.parent
     argv = list(reversed(ancestors))
-    trailing = []
+    trailing: list[str] = []
     for parameter in context.command.params:
         value = context.params.get(str(parameter.name))
         if parameter.name in {"execution", "non_interactive"} or value is None:
             continue
+        if isinstance(parameter.type, click.Path) and Path(value).is_absolute():
+            value = str(Path(value).resolve())
         if isinstance(parameter, click.Option):
             if parameter.is_flag:
                 if value:
@@ -131,6 +133,8 @@ def docker_command(
     for key in ("wit_path", "component", "source", "wasm"):
         if params.get(key):
             explicit = Path(params[key])
+            if explicit.is_absolute():
+                explicit = explicit.resolve()
             add(
                 (
                     explicit.parent
