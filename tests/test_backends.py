@@ -210,13 +210,14 @@ world names {
         WitParser().parse(wit).select_world("names")
     )
     for declaration in (
-        "export function addNumber(firstNumber)",
-        "export const numberApi",
+        "function _addNumber(_firstNumber)",
+        "export { _addNumber as addNumber }",
+        "export { _numberApi as numberApi }",
         "NumberBox: class",
-        "constructor(initialValue)",
+        "constructor(_initialValue)",
         "getNumber()",
-        "static fromNumber(initialValue)",
-        "addNumber: (firstNumber)",
+        "static fromNumber(_initialValue)",
+        "addNumber: (_firstNumber)",
     ):
         assert declaration in source
 

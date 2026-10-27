@@ -1,11 +1,24 @@
 from __future__ import annotations
 
+import keyword
 import os
 from pathlib import Path
 
 from tarawasm.wit import WitFunction, WitWorld
 
-from .base import Command, LanguageBackend, pascal, snake
+from .base import Command, LanguageBackend
+from .base import pascal as base_pascal
+from .base import snake as base_snake
+
+
+def snake(name: str) -> str:
+    name = base_snake(name)
+    return name + "_" if keyword.iskeyword(name) else name
+
+
+def pascal(name: str) -> str:
+    name = base_pascal(name)
+    return name + "_" if keyword.iskeyword(name) else name
 
 
 def _method(function: WitFunction, indent: str = "    ") -> list[str]:

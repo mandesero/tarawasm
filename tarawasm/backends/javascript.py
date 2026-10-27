@@ -57,12 +57,13 @@ class JavaScriptBackend(LanguageBackend):
         lines: list[str] = []
         direct = [item.function for item in world.exports if item.function]
         for function in direct:
-            args = ", ".join(camel(param.name) for param in function.params)
+            args = ", ".join("_" + camel(param.name) for param in function.params)
             lines.extend(
                 [
-                    f"export function {camel(function.name)}({args}) {{",
+                    f"function _{camel(function.name)}({args}) {{",
                     f'    throw new Error("TODO: implement WIT item {function.name}");',
                     "}",
+                    f"export {{ _{camel(function.name)} as {camel(function.name)} }};",
                     "",
                 ]
             )
@@ -73,13 +74,15 @@ class JavaScriptBackend(LanguageBackend):
             resources = sorted(
                 {f.resource for f in interface.functions if f.resource is not None}
             )
-            lines.append(f"export const {camel(interface.name)} = {{")
+            lines.append(f"const _{camel(interface.name)} = {{")
             for resource in resources:
                 lines.append(f"    {pascal(resource)}: class {{")
                 for function in [
                     f for f in interface.functions if f.resource == resource
                 ]:
-                    args = [camel(p.name) for p in function.params if p.name != "self"]
+                    args = [
+                        "_" + camel(p.name) for p in function.params if p.name != "self"
+                    ]
                     if function.kind == "constructor":
                         declaration = f"        constructor({', '.join(args)}) {{"
                     elif function.kind == "static":
@@ -97,7 +100,7 @@ class JavaScriptBackend(LanguageBackend):
             for function in interface.functions:
                 if function.kind != "freestanding":
                     continue
-                args = ", ".join(camel(param.name) for param in function.params)
+                args = ", ".join("_" + camel(param.name) for param in function.params)
                 method = camel(function.name)
                 lines.extend(
                     [
@@ -107,6 +110,9 @@ class JavaScriptBackend(LanguageBackend):
                     ]
                 )
             lines.extend(["};", ""])
+            lines.append(
+                f"export {{ _{camel(interface.name)} as {camel(interface.name)} }};"
+            )
         if not lines:
             # Jco's bundler omits an empty module; retain a JS-only default export.
             # The WIT world still determines the component's exports.
