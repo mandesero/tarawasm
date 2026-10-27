@@ -62,6 +62,9 @@ def test_generated_starter_builds(tmp_path, mode, language, exports, capfd):
         pytest.skip(f"Local {language} toolchain is incomplete")
     wit = tmp_path / "wit"
     wit.mkdir()
+    world = (
+        "calculator-world" if (language, exports) == ("c", "direct") else "calculator"
+    )
     imports = ""
     if language == "go":
         # TinyGo needs these imports even when the guest exports nothing.
@@ -76,7 +79,7 @@ def test_generated_starter_builds(tmp_path, mode, language, exports, capfd):
         "interface marker {}\n"
         "interface handles { resource token; }\n"
         "interface data { record point { x: s32 } }\n"
-        f"world calculator {{ {imports}\n{EXPORTS[exports]} }}\n"
+        f"world {world} {{ {imports}\n{EXPORTS[exports]} }}\n"
     )
     run_cli(
         tmp_path,
@@ -86,7 +89,7 @@ def test_generated_starter_builds(tmp_path, mode, language, exports, capfd):
         "--wit",
         "wit",
         "--world",
-        "calculator",
+        world,
         ".",
         mode=mode,
     )
@@ -103,7 +106,7 @@ def test_generated_starter_builds(tmp_path, mode, language, exports, capfd):
                 raise EmptyInterfaceCompilerError(diagnostic) from exc
             raise AssertionError(captured.out + captured.err) from exc
         raise
-    assert (tmp_path / "dist/calculator.wasm").is_file()
+    assert (tmp_path / f"dist/{world}.wasm").is_file()
     assert source.read_bytes() == original
     if exports == "resource-interface":
         component = run_tool(
