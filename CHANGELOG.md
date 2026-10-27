@@ -8,6 +8,8 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Escape keyword identifiers in Python, JavaScript and Rust starters without
+  changing their public WIT exports.
 - Keep same-named resources in separate JavaScript and Rust interface scopes.
 - Generate C destructors and Rust resource implementations for exported resources
   without constructors or methods.

@@ -20,6 +20,10 @@ EXPORTS = {
     "type-interface": "export data;",
     "singleton-tuple": "export roundtrip: func(value: tuple<u32>) -> tuple<u32>;",
     "resource-names": "export first; export first-foo;",
+    "keywords": (
+        "export %type: func(%class: u32) -> u32; "
+        "export %default: func(%class: u32) -> u32; export %class; export %mod;"
+    ),
 }
 
 
@@ -59,6 +63,7 @@ class DuplicateResourceCompilerError(RuntimeError):
         )
     ]
     + [(language, "resource-interface") for language in ("go", "rust", "c")]
+    + [(language, "keywords") for language in ("python", "js", "rust")]
     + [
         pytest.param(
             "js",
@@ -101,6 +106,8 @@ def test_generated_starter_builds(tmp_path, mode, language, exports, capfd):
         "interface data { record point { x: s32 } }\n"
         "interface first { resource token { constructor(); } resource foo-token { constructor(); } }\n"
         "interface first-foo { resource token { constructor(); } }\n"
+        "interface %class { resource %true { constructor(%class: u32); %async: func(%class: u32) -> u32; } %async: func(%class: u32) -> u32; }\n"
+        "interface %mod { %match: func(%class: u32) -> u32; }\n"
         f"world {world} {{ {imports}\n{EXPORTS[exports]} }}\n"
     )
     run_cli(

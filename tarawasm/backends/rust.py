@@ -23,6 +23,20 @@ _PRIMITIVES = {
 }
 
 
+# Match cargo-component's wit-bindgen identifier escaping, not Rust raw identifiers.
+_KEYWORDS = frozenset(
+    "as break const continue crate else enum extern false fn for if impl in let loop "
+    "match mod move mut pub ref return self static struct super trait true type unsafe "
+    "use where while async await dyn abstract become box do final macro override priv "
+    "typeof unsized virtual yield try".split()
+)
+
+
+def _ident(name: str) -> str:
+    name = snake(name)
+    return name + "_" if name in _KEYWORDS else name
+
+
 def _rust_type(value: WitType, module: str = "bindings") -> str:
     if value.kind == "primitive":
         return _PRIMITIVES[value.name or ""]
@@ -113,7 +127,7 @@ world = "{world.name}"
                 )
                 lines.extend(
                     [
-                        f"    fn {snake(function.name)}({args}){result} {{",
+                        f"    fn {_ident(function.name)}({args}){result} {{",
                         f'        todo!("implement WIT item {function.name}")',
                         "    }",
                     ]
@@ -127,8 +141,8 @@ world = "{world.name}"
             package = interface.package.split("@", 1)[0]
             namespace, package_name = package.split(":", 1)
             module = (
-                f"bindings::exports::{snake(namespace)}::{snake(package_name)}::"
-                f"{snake(interface.name)}"
+                f"bindings::exports::{_ident(namespace)}::{snake(package_name)}::"
+                f"{_ident(interface.name)}"
             )
             functions = [f for f in interface.functions if f.kind == "freestanding"]
             resources = sorted(
@@ -150,7 +164,7 @@ world = "{world.name}"
                     )
                     lines.extend(
                         [
-                            f"    fn {snake(function.name)}({args}){result} {{",
+                            f"    fn {_ident(function.name)}({args}){result} {{",
                             f'        todo!("implement WIT item {function.name}")',
                             "    }",
                         ]
@@ -185,7 +199,7 @@ world = "{world.name}"
                     name = (
                         "new"
                         if function.kind == "constructor"
-                        else snake(function.name.split(".")[-1])
+                        else _ident(function.name.split(".")[-1])
                     )
                     if function.kind == "constructor":
                         result = " -> Self"
