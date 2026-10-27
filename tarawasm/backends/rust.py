@@ -123,6 +123,7 @@ world = "{world.name}"
             interface = item.interface
             if interface is None:
                 continue
+            lines.append("const _: () = {")
             package = interface.package.split("@", 1)[0]
             namespace, package_name = package.split(":", 1)
             module = (
@@ -202,6 +203,7 @@ world = "{world.name}"
                         ]
                     )
                 lines.extend(["}", ""])
+            lines.extend(["};", ""])
         if world.exports:
             lines.extend(["bindings::export!(Component with_types_in bindings);", ""])
         return "\n".join(lines)

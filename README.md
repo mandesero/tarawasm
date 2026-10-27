@@ -214,6 +214,9 @@ Generated names follow JavaScript conventions: WIT `add-number` becomes
 `addNumber`. See [JavaScript features and diagnostics](docs/usage-reference.md#javascript-dependencies-and-features)
 for feature selectors and compiler fallback behavior.
 
+ComponentizeJS 0.23.0 cannot build components with same-named resources in
+different exported interfaces.
+
 ### Go, Rust and C/C++
 
 Go requires the complete versioned `wasi:cli/imports@0.2.x` world for TinyGo's

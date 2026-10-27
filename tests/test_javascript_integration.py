@@ -122,7 +122,7 @@ def test_npm_archive_bundle_http_names_strip_validate_execute(
         "add-number": "return add(firstNumber, secondNumber);",
         "[constructor]number-box": "this.value = initialValue;",
         "[method]number-box.get-number": "return this.value;",
-        "[static]number-box.from-number": "return new NumberBox(initialValue);",
+        "[static]number-box.from-number": "return new this(initialValue);",
     }
     for name, body in bodies.items():
         marker = f'throw new Error("TODO: implement WIT item {name}");'
