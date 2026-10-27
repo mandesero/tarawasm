@@ -8,6 +8,7 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Match C binding filenames for WIT worlds with hyphenated names.
 - Fix starter generation for minimal WIT worlds across Python, Go, Rust and
   JavaScript: avoid missing Python interface bindings, unused Go interface
   imports and absent Rust export macros; keep empty JavaScript modules
