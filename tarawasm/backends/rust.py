@@ -201,7 +201,8 @@ world = "{world.name}"
                         ]
                     )
                 lines.extend(["}", ""])
-        lines.extend(["bindings::export!(Component with_types_in bindings);", ""])
+        if world.exports:
+            lines.extend(["bindings::export!(Component with_types_in bindings);", ""])
         return "\n".join(lines)
 
     def bind_command(self, conf, *, world, wit, tool_args):

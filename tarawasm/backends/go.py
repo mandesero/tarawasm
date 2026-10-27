@@ -211,7 +211,9 @@ class GoBackend(LanguageBackend):
                 )
                 imports.append(
                     (
-                        snake(item.interface.name),
+                        # Keep bindgen initialization (e.g. resource destructors)
+                        # even when there are no function stubs using the package.
+                        snake(item.interface.name) if item.interface.functions else "_",
                         (
                             f"{module}/internal/{interface_namespace}/"
                             f"{interface_package}/{item.interface.name}"

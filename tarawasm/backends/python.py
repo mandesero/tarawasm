@@ -65,7 +65,10 @@ class PythonBackend(LanguageBackend):
         return files
 
     def generate_source(self, world: WitWorld) -> str:
-        lines = ["import wit_world", "from wit_world import exports", ""]
+        lines = ["import wit_world"]
+        if any(item.interface is not None for item in world.exports):
+            lines.append("from wit_world import exports")
+        lines.append("")
         direct = [item.function for item in world.exports if item.function]
         if direct:
             lines.append("class WitWorld(wit_world.WitWorld):")
@@ -88,7 +91,7 @@ class PythonBackend(LanguageBackend):
             else:
                 lines.append("    pass")
             lines.append("")
-        if len(lines) == 2:
+        if not world.exports:
             lines.extend(["# The selected world has no exports.", ""])
         return "\n".join(lines).rstrip() + "\n"
 

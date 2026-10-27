@@ -90,7 +90,18 @@ tarawasm init --lang python --wit ./wit --world calculator .
 tarawasm bind
 ```
 
-Edit the generated `main.py` to implement `add`, then build:
+In the generated `main.py`, implement `add`:
+
+```python
+import wit_world
+
+
+class WitWorld(wit_world.WitWorld):
+    def add(self, a: int, b: int) -> int:
+        return a + b
+```
+
+Then build:
 
 ```sh
 tarawasm build
