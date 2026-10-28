@@ -4,7 +4,7 @@ from pathlib import Path
 
 from tarawasm.wit import WitType
 
-from .base import Command, LanguageBackend, pascal, snake
+from .base import BackendError, Command, LanguageBackend, pascal, snake
 
 _PRIMITIVES = {
     "bool": "bool",
@@ -55,6 +55,20 @@ def _rust_type(value: WitType, module: str = "bindings") -> str:
         err_type = "()" if err is None else _rust_type(err, module)
         return f"Result<{ok_type}, {err_type}>"
     return "()"
+
+
+def _check_target(conf, world, wit, source=None):
+    if (
+        world != conf.world
+        or wit.resolve() != conf.resolve_path(conf.wit_path)
+        or source is not None
+        and source.resolve() != conf.resolve_path(conf.source)
+    ):
+        raise BackendError(
+            "Rust does not support --world, --wit or --src overrides that differ "
+            "from tarawasm.json. Configure the Rust target in Cargo.toml and "
+            "keep tarawasm.json in sync."
+        )
 
 
 class RustBackend(LanguageBackend):
@@ -223,9 +237,11 @@ world = "{world.name}"
         return "\n".join(lines)
 
     def bind_command(self, conf, *, world, wit, tool_args):
+        _check_target(conf, world, wit)
         return Command(("cargo", "component", "bindings", *tool_args))
 
     def build_command(self, conf, *, world, wit, source, output, tool_args):
+        _check_target(conf, world, wit, source)
         return Command(
             ("cargo", "component", "build", "--release", *tool_args),
             {"CARGO_TARGET_DIR": str(conf.build_dir / "rust")},

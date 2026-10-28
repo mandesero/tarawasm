@@ -159,6 +159,36 @@ def test_bind_dry_run_does_not_invoke_tool_or_create_manifest(tmp_path, monkeypa
     assert not (tmp_path / ".tarawasm/artifacts.json").exists()
 
 
+@pytest.mark.parametrize(
+    "command,flag,value",
+    [
+        (command, flag, value)
+        for command in ("bind", "build")
+        for flag, value in (("--world", "other"), ("--wit", "other.wit"))
+    ]
+    + [("build", "--src", "other.rs")],
+)
+def test_rust_rejects_ignored_overrides(tmp_path, monkeypatch, command, flag, value):
+    conf = _write_project(tmp_path, monkeypatch, "rust")
+    wit = conf.resolve_path(conf.wit_path)
+    wit.write_text(CALCULATOR_WIT + "world other { export other: func(); }\n")
+    (tmp_path / "other.wit").write_bytes(wit.read_bytes())
+    output = conf.resolve_path(conf.output)
+    output.parent.mkdir()
+    output.write_bytes(b"previous component")
+    before = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+
+    def unexpected_run(*args, **kwargs):
+        pytest.fail("Compiler must not run for unsupported Rust overrides")
+
+    # WIT parsing still uses wasm-tools; the command runner must remain unused.
+    monkeypatch.setattr("tarawasm.cli._run", unexpected_run)
+    result = CliRunner().invoke(cli, [command, flag, value])
+    assert result.exit_code == 1
+    assert "Rust does not support" in result.output
+    assert before == {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+
+
 def test_go_bind_does_not_require_build_time_wasi_imports(tmp_path, monkeypatch):
     _write_project(tmp_path, monkeypatch, "go")
     result = CliRunner().invoke(cli, ["bind", "--dry-run"])

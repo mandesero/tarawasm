@@ -228,6 +228,9 @@ headers or libraries. See [package installation by language](docs/usage-referenc
 If you change Go module paths or binding layout, update your source imports too.
 C/C++ builds need a WASI SDK compiler and its sysroot.
 
+Rust target changes belong in `Cargo.toml`, with `tarawasm.json` kept in sync;
+differing `--world`, `--wit` and `--src` overrides are rejected.
+
 ### C#
 
 C# support uses an experimental Linux amd64 toolchain. `source` and `--src`
