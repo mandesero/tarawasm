@@ -119,3 +119,34 @@ def test_docker_mode_does_not_change_existing_permissions(tmp_path, monkeypatch)
     protected.write_text("keep")
     protected.chmod(0o640)
     assert os.stat(protected).st_mode & 0o777 == 0o640
+
+
+@pytest.mark.parametrize(
+    "target", ["internal", "external", "missing", "directory", "external-directory"]
+)
+def test_clean_does_not_follow_replaced_artifacts(tmp_path, target):
+    root = tmp_path / "project"
+    root.mkdir()
+    base = tmp_path / "external" if target == "external-directory" else root
+    generated = base / "bindings" / "generated.c"
+    generated.parent.mkdir(parents=True)
+    generated.write_text("generated")
+    manifest = ArtifactManifest(root, root / ".tarawasm")
+    manifest.record(generated)
+    user_file = (tmp_path if target == "external" else root) / "notes.c"
+    user_file.write_text("user data")
+    if target.endswith("directory"):
+        generated.unlink()
+        generated.parent.rmdir()
+        user_dir = base / "user"
+        user_dir.mkdir()
+        user_file.rename(user_dir / generated.name)
+        user_file = user_dir / generated.name
+        generated.parent.symlink_to(user_dir, target_is_directory=True)
+    else:
+        generated.unlink()
+        generated.symlink_to(root / "absent" if target == "missing" else user_file)
+    manifest.clean()
+    assert user_file.read_text() == "user data"
+    assert not generated.is_symlink()
+    assert generated.exists() == target.endswith("directory")

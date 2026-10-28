@@ -8,6 +8,7 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Keep cleanup from following replaced artifact symlinks or linked directories.
 - Resolve absolute CLI path aliases consistently with Docker mounts, including
   external WIT paths and linked C# project files.
 - Escape keyword identifiers in Python, JavaScript and Rust starters without

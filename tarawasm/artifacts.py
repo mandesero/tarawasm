@@ -68,14 +68,13 @@ class ArtifactManifest:
         path = Path(relative)
         if path.is_absolute() or ".." in path.parts or path == Path("."):
             return None
-        resolved = (self.project_root / path).resolve()
-        try:
-            resolved.relative_to(self.project_root)
-        except ValueError:
+        candidate = self.project_root / path
+        # Never traverse replaced directories, and unlink a final symlink itself.
+        if candidate.parent.resolve() != candidate.parent:
             return None
-        if resolved in (self.project_root, self.state_dir, self.path):
+        if candidate in (self.project_root, self.state_dir, self.path):
             return None
-        return resolved
+        return candidate
 
     def record_created_since(self, before: set[str]) -> None:
         created = self.snapshot() - before
@@ -115,7 +114,9 @@ class ArtifactManifest:
             removed.append(relative)
         for rendered in sorted(self._external()):
             path = Path(rendered)
-            if path.is_file() or path.is_symlink():
+            if path.parent.resolve() == path.parent and (
+                path.is_file() or path.is_symlink()
+            ):
                 path.unlink()
                 removed.append(rendered)
         if self.path.exists():
