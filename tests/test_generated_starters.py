@@ -34,6 +34,7 @@ EXPORTS = {
         "export check: func(int: u32) -> u32; "
         "export text: func(ret: string, err: u32) -> result<string, string>;"
     ),
+    "resource-handles": "export borrowed;",
 }
 
 
@@ -91,6 +92,7 @@ class DuplicateResourceCompilerError(RuntimeError):
         ("rust", "inline-interface"),
         ("c", "options"),
         ("c", "c-identifiers"),
+        ("rust", "resource-handles"),
     ],
 )
 def test_generated_starter_builds(tmp_path, mode, language, exports, capfd):
@@ -116,6 +118,7 @@ def test_generated_starter_builds(tmp_path, mode, language, exports, capfd):
         "package example:calculator@0.1.0;\n"
         "interface arithmetic { add: func(a: s32, b: s32) -> s32; }\n"
         "interface marker {}\n"
+        "interface borrowed { resource token { constructor(); take: static func(value: borrow<token>); } consume: func(value: borrow<token>); roundtrip: func(value: token) -> token; }\n"
         "interface options { type maybe = option<u32>; check: func(value: maybe) -> maybe; }\n"
         "interface handles { resource token; }\n"
         "interface data { record point { x: s32 } }\n"

@@ -42,6 +42,10 @@ def _rust_type(value: WitType, module: str = "bindings") -> str:
         return _PRIMITIVES[value.name or ""]
     if value.name:
         return f"{module}::{pascal(value.name)}"
+    if value.kind == "handle":
+        kind, resource = value.value
+        suffix = "Borrow<'_>" if kind == "borrow" else ""
+        return f"{module}::{pascal(resource.name)}{suffix}"
     if value.kind == "list":
         return f"Vec<{_rust_type(value.value, module)}>"
     if value.kind == "option":
@@ -203,14 +207,7 @@ world = "{world.name}"
                         if function.kind == "method" and param.name == "self":
                             arguments.append("&self")
                             continue
-                        if param.type.kind == "handle":
-                            handle_kind, handle_resource = param.type.value
-                            if handle_kind == "borrow" and handle_resource.name:
-                                rust_type = f"{module}::{pascal(handle_resource.name)}Borrow<'_>"
-                            else:
-                                rust_type = _rust_type(param.type, module)
-                        else:
-                            rust_type = _rust_type(param.type, module)
+                        rust_type = _rust_type(param.type, module)
                         arguments.append(f"_{snake(param.name)}: {rust_type}")
                     name = (
                         "new"
