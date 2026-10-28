@@ -158,6 +158,8 @@ world = "{world.name}"
                 f"bindings::exports::{_ident(namespace)}::{snake(package_name)}::"
                 f"{_ident(interface.name)}"
             )
+            if not interface.name:
+                module = f"bindings::exports::{_ident(item.name)}"
             functions = [f for f in interface.functions if f.kind == "freestanding"]
             resources = sorted(
                 t.name for t in interface.types if t.kind == "resource" and t.name
