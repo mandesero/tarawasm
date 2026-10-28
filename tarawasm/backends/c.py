@@ -126,6 +126,8 @@ class CBackend(LanguageBackend):
             elif item.interface is not None:
                 package = item.interface.package.split("@", 1)[0].replace(":", "_")
                 prefix = f"exports_{snake(package)}_{snake(item.interface.name)}"
+                if not item.interface.name:
+                    prefix = snake(item.name)
                 resources = sorted(
                     t.name
                     for t in item.interface.types

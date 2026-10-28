@@ -24,6 +24,7 @@ EXPORTS = {
         "export %type: func(%class: u32) -> u32; "
         "export %default: func(%class: u32) -> u32; export %class; export %mod;"
     ),
+    "inline-interface": "export api: interface { check: func(value: u32) -> u32; }",
 }
 
 
@@ -77,6 +78,8 @@ class DuplicateResourceCompilerError(RuntimeError):
         ("rust", "resource-names"),
         ("go", "type-interface"),
         ("rust", "singleton-tuple"),
+        ("c", "inline-interface"),
+        ("rust", "inline-interface"),
     ],
 )
 def test_generated_starter_builds(tmp_path, mode, language, exports, capfd):

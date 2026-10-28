@@ -141,7 +141,7 @@ class WitParser:
             )
             interfaces.append(
                 WitInterface(
-                    name=str(entry["name"]),
+                    name=entry["name"] or "",
                     functions=functions,
                     types=interface_types,
                     package=package,
