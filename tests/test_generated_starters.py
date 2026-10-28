@@ -143,6 +143,9 @@ def test_generated_starter_builds(tmp_path, mode, language, exports, capfd):
         raise
     assert (tmp_path / f"dist/{world}.wasm").is_file()
     assert source.read_bytes() == original
+    if (language, exports) == ("c", "direct"):
+        run_cli(tmp_path, "build", "--clean", mode=mode)
+        assert (tmp_path / f"dist/{world}.wasm").is_file()
     if exports == "resource-interface":
         component = run_tool(
             tmp_path,

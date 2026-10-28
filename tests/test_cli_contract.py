@@ -259,11 +259,15 @@ def test_component_import_rejects_core_module_without_creating_project(
     assert not (tmp_path / "project").exists()
 
 
-def test_failed_build_preserves_previous_output(tmp_path, monkeypatch):
+@pytest.mark.parametrize("clean", [False, True])
+def test_failed_build_preserves_previous_output(tmp_path, monkeypatch, clean):
     conf = _write_project(tmp_path, monkeypatch)
     output = conf.resolve_path(conf.output)
     output.parent.mkdir()
     output.write_bytes(b"previous component")
+    from tarawasm.artifacts import ArtifactManifest
+
+    ArtifactManifest(conf.project_root, conf.state_dir).record(output)
 
     class FailingBackend:
         def validate_world(self, _world):
@@ -286,7 +290,7 @@ def test_failed_build_preserves_previous_output(tmp_path, monkeypatch):
             subprocess.CalledProcessError(7, ["failing-tool"])
         ),
     )
-    result = CliRunner().invoke(cli, ["build"])
+    result = CliRunner().invoke(cli, ["build", *(["--clean"] if clean else [])])
     assert result.exit_code != 0
     assert output.read_bytes() == b"previous component"
 
