@@ -66,10 +66,18 @@ def _declaration(
 ) -> str:
     params: list[str] = []
     for param in function.params:
-        c_type, pointer = _c_type(param.type, world_prefix, interface_prefix)
+        if param.type.kind == "option":
+            c_type, _ = _c_type(param.type.value, world_prefix, interface_prefix)
+            pointer = True
+        else:
+            c_type, pointer = _c_type(param.type, world_prefix, interface_prefix)
         params.append(f"{c_type}{' *' if pointer else ' '}{snake(param.name)}")
     if function.result is None:
         result = "void"
+    elif function.result.kind == "option":
+        result = "bool"
+        c_type, _ = _c_type(function.result.value, world_prefix, interface_prefix)
+        params.append(f"{c_type} *ret")
     elif function.result.kind == "result":
         result = "bool"
         ok, err = function.result.value
