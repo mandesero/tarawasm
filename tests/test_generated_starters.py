@@ -30,6 +30,10 @@ EXPORTS = {
         "export nested: func(value: option<option<u32>>) -> option<option<u32>>; "
         "export text: func(value: option<string>) -> option<string>; export options;"
     ),
+    "c-identifiers": (
+        "export check: func(int: u32) -> u32; "
+        "export text: func(ret: string, err: u32) -> result<string, string>;"
+    ),
 }
 
 
@@ -86,6 +90,7 @@ class DuplicateResourceCompilerError(RuntimeError):
         ("c", "inline-interface"),
         ("rust", "inline-interface"),
         ("c", "options"),
+        ("c", "c-identifiers"),
     ],
 )
 def test_generated_starter_builds(tmp_path, mode, language, exports, capfd):

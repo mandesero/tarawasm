@@ -71,7 +71,7 @@ def _declaration(
             pointer = True
         else:
             c_type, pointer = _c_type(param.type, world_prefix, interface_prefix)
-        params.append(f"{c_type}{' *' if pointer else ' '}{snake(param.name)}")
+        params.append(f"{c_type}{' *' if pointer else ' '}_{snake(param.name)}")
     if function.result is None:
         result = "void"
     elif function.result.kind == "option":
