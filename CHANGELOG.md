@@ -8,6 +8,7 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Match wit-bindgen's optional argument and result ABI in C starters.
 - Use world export names for C and Rust implementations of inline interfaces.
 - Limit `build --clean` to tracked build intermediates, preserving selected output.
 - Reject differing Rust target overrides before running Cargo or changing artifacts.

@@ -25,6 +25,11 @@ EXPORTS = {
         "export %default: func(%class: u32) -> u32; export %class; export %mod;"
     ),
     "inline-interface": "export api: interface { check: func(value: u32) -> u32; }",
+    "options": (
+        "export check: func(value: option<u32>) -> option<u32>; "
+        "export nested: func(value: option<option<u32>>) -> option<option<u32>>; "
+        "export text: func(value: option<string>) -> option<string>; export options;"
+    ),
 }
 
 
@@ -80,6 +85,7 @@ class DuplicateResourceCompilerError(RuntimeError):
         ("rust", "singleton-tuple"),
         ("c", "inline-interface"),
         ("rust", "inline-interface"),
+        ("c", "options"),
     ],
 )
 def test_generated_starter_builds(tmp_path, mode, language, exports, capfd):
@@ -105,6 +111,7 @@ def test_generated_starter_builds(tmp_path, mode, language, exports, capfd):
         "package example:calculator@0.1.0;\n"
         "interface arithmetic { add: func(a: s32, b: s32) -> s32; }\n"
         "interface marker {}\n"
+        "interface options { type maybe = option<u32>; check: func(value: maybe) -> maybe; }\n"
         "interface handles { resource token; }\n"
         "interface data { record point { x: s32 } }\n"
         "interface first { resource token { constructor(); } resource foo-token { constructor(); } }\n"
