@@ -8,6 +8,7 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Limit `build --clean` to tracked build intermediates, preserving selected output.
 - Reject differing Rust target overrides before running Cargo or changing artifacts.
 - Keep cleanup from following replaced artifact symlinks or linked directories.
 - Resolve absolute CLI path aliases consistently with Docker mounts, including

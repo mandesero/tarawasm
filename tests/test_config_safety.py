@@ -150,3 +150,22 @@ def test_clean_does_not_follow_replaced_artifacts(tmp_path, target):
     assert user_file.read_text() == "user data"
     assert not generated.is_symlink()
     assert generated.exists() == target.endswith("directory")
+
+
+def test_scoped_clean_retains_bindings_outputs_and_unregistered_files(tmp_path):
+    manifest = ArtifactManifest(tmp_path, tmp_path / ".tarawasm")
+    build = tmp_path / ".tarawasm/build"
+    paths = [tmp_path / "bindings/api.h", build / "old.o", build / "out.wasm"]
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("generated")
+        manifest.record(path)
+    user_file = build / "notes.txt"
+    user_file.write_text("user data")
+    manifest.clean(directory=build, preserve=paths[-1])
+    assert paths[0].exists() and paths[-1].exists()
+    assert not paths[1].exists()
+    assert user_file.read_text() == "user data"
+    manifest.clean()
+    assert not paths[0].exists() and not paths[-1].exists()
+    assert user_file.read_text() == "user data"

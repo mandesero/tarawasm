@@ -141,6 +141,8 @@ It leaves the input binary untouched. Core WebAssembly modules are not accepted.
 
 Use `--dry-run` on `init`, `bind` or `build` to preview an operation.
 Build options include `--src`, `--out`, `--wit` and `--world`.
+`build --clean` removes tracked files under `.tarawasm/build/`, preserving the
+selected output until a successful replacement.
 Arguments after `--` go to the underlying tool; `--tool-help` shows its help.
 A failed build preserves the previous successful output.
 

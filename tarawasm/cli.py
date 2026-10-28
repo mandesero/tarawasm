@@ -563,14 +563,17 @@ def bind(
 @click.option("--wit", "wit_path", type=click.Path(path_type=Path))
 @click.option("--src", "source", type=click.Path(path_type=Path))
 @click.option("--out", "output", type=click.Path(path_type=Path))
-@click.option("--clean", "run_clean", is_flag=True)
+@click.option(
+    "--clean",
+    "run_clean",
+    is_flag=True,
+    help="Remove tracked build intermediates before rebuilding.",
+)
 @click.option("--tool-help", is_flag=True)
 @click.option("--dry-run", is_flag=True)
 @click.argument("tool_args", nargs=-1, type=click.UNPROCESSED)
-@click.pass_context
 @execution_options
 def build(
-    ctx: click.Context,
     world: str | None,
     wit_path: Path | None,
     source: Path | None,
@@ -614,10 +617,10 @@ def build(
     if tool_help:
         _run(Command((*command.argv, "--help"), command.env), check=False)
         return
-    if run_clean and not dry_run:
-        ctx.invoke(clean)
     with _project_directory(conf):
         manifest = ArtifactManifest(conf.project_root, conf.state_dir)
+        if run_clean and not dry_run:
+            manifest.clean(directory=conf.build_dir, preserve=resolved_output)
         before = manifest.snapshot()
         if dry_run:
             _run(command, dry_run=True)

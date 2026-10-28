@@ -95,7 +95,9 @@ class ArtifactManifest:
             if self._safe_path(relative) is not None:
                 self._write(self._load() | {relative}, self._external())
 
-    def clean(self) -> list[str]:
+    def clean(
+        self, *, directory: Path | None = None, preserve: Path | None = None
+    ) -> list[str]:
         removed: list[str] = []
         artifacts = self._load()
         for relative in sorted(
@@ -103,6 +105,10 @@ class ArtifactManifest:
         ):
             path = self._safe_path(relative)
             if path is None or not path.exists() and not path.is_symlink():
+                continue
+            if directory is not None and (
+                not path.is_relative_to(directory) or path == preserve
+            ):
                 continue
             if path.is_dir() and not path.is_symlink():
                 try:
@@ -112,6 +118,9 @@ class ArtifactManifest:
             else:
                 path.unlink()
             removed.append(relative)
+        if directory is not None:
+            self._write(artifacts - set(removed), self._external())
+            return removed
         for rendered in sorted(self._external()):
             path = Path(rendered)
             if path.parent.resolve() == path.parent and (
