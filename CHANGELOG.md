@@ -6,6 +6,20 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Tarantool project initialization with the verified `tarantool-wasm-rs` 0.1.0
+  SDK, an empty application world with configurable package/world names,
+  language dependency locks and a project-local
+  `.rocks/lib/tarantool/wasm.so` runtime on Linux x86-64 and macOS arm64.
+- Selectable Tarantool SDK releases with pinned dependencies; existing projects
+  keep their selected release.
+- `tarawasm tarantool setup` to install SDK/runtime dependencies for existing
+  projects without rewriting application source, and SDK integrity/compatibility
+  diagnostics in `doctor`.
+- Automatic SSL and asyncio name resolution for Python Tarantool projects,
+  including the SDK's socket-error compatibility fix during builds.
+
 ### Fixed
 
 - Preserve owned and borrowed resource types in Rust freestanding signatures.

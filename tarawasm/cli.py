@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -7,6 +8,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Mapping
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -16,8 +18,11 @@ from tarawasm.artifacts import ArtifactManifest
 from tarawasm.backends import BackendError, backend_names, get_backend
 from tarawasm.backends.base import Command
 from tarawasm.config import CONFIG_FILE, IMPORTED_WIT_DIR, Config, ConfigError
+from tarawasm.tarantool import CATALOG as TARANTOOL_RELEASES
+from tarawasm.tarantool import dependency_locks, host_platform
 from tarawasm.toolchains.cli import doctor, toolchain
 from tarawasm.toolchains.runtime import command_argv, executable, execution_options
+from tarawasm.toolchains.settings import ToolchainError
 from tarawasm.wit import WitError, WitParser
 
 
@@ -113,7 +118,7 @@ def _config_bytes(conf: Config, root: Path) -> bytes:
 
 def _install_project_files(
     root: Path,
-    files: dict[Path, str | bytes],
+    files: Mapping[Path, str | bytes],
     *,
     force: bool,
     sources: set[Path],
@@ -202,11 +207,30 @@ def csharp_tool(arguments):
 @click.option(
     "--wit",
     "wit_path",
-    required=True,
     type=click.Path(path_type=Path, exists=True),
     help="WIT file or package directory.",
 )
-@click.option("--world", help="World to implement; inferred when WIT has one world.")
+@click.option("--target", type=click.Choice(["tarantool"]))
+@click.option(
+    "--tarantool-wasm-version",
+    default=None,
+    help=f"Verified release (default: {TARANTOOL_RELEASES['default']}; available: {', '.join(TARANTOOL_RELEASES['releases'])}).",
+)
+@click.option(
+    "--runtime-platform",
+    type=click.Choice(["macos-arm64", "linux-x86_64"]),
+    default=host_platform,
+    help="Runtime platform (defaults to the CLI host, independently of the compiler).",
+)
+@click.option(
+    "--sdk-only", is_flag=True, help="Prepare the SDK without a native runtime."
+)
+@click.option(
+    "--world", help="World to create or implement; inferred from supplied WIT."
+)
+@click.option(
+    "--package", "wit_package", help="Package name for generated Tarantool WIT."
+)
 @click.option("--force", is_flag=True, help="Replace known generated project files.")
 @click.option(
     "--dry-run", is_flag=True, help="Validate and show files without writing."
@@ -215,13 +239,66 @@ def csharp_tool(arguments):
 @execution_options
 def init(
     language: str,
-    wit_path: Path,
+    wit_path: Path | None,
     world: str | None,
     force: bool,
     dry_run: bool,
     project_dir: Path,
+    target: str | None = None,
+    tarantool_wasm_version: str | None = None,
+    runtime_platform: str | None = None,
+    sdk_only: bool = False,
+    wit_package: str | None = None,
 ) -> None:
     """Create a project directly from a WIT contract."""
+    if target == "tarantool":
+        from tarawasm import tarantool
+
+        root = project_dir.expanduser().resolve()
+        version = (
+            tarantool.CATALOG["default"]
+            if tarantool_wasm_version is None
+            else tarantool_wasm_version
+        )
+        try:
+            tarantool.release(version)
+            if wit_package is not None and wit_path:
+                raise BackendError(
+                    "Use --package only when generating WIT, without --wit."
+                )
+        except BackendError as exc:
+            raise _fail(exc)
+        if dry_run:
+            click.echo(
+                f"Would prepare Tarantool-Wasm {version} "
+                f"for {language} in {root}; runtime: {'none' if sdk_only else runtime_platform}."
+            )
+            return
+        try:
+            tarantool_files = tarantool.project_files(
+                language,
+                wit=wit_path,
+                world=world,
+                version=version,
+                package=wit_package,
+                runtime_platform=runtime_platform,
+                sdk_only=sdk_only,
+            )
+            # Environment inputs and user source are protected even with --force.
+            tarantool.check_destinations(root, tarantool_files)
+            _install_project_files(
+                root, tarantool_files, force=False, sources=set(tarantool_files)
+            )
+        except (BackendError, WitError, OSError, subprocess.CalledProcessError) as exc:
+            raise _fail(exc)
+        click.echo(
+            f"Tarantool project prepared in {root}. Run tarawasm bind, then tarawasm build."
+        )
+        return
+    if tarantool_wasm_version is not None or sdk_only or wit_package is not None:
+        raise click.UsageError("Tarantool options require --target tarantool.")
+    if wit_path is None:
+        raise click.UsageError("Missing option '--wit' (or select --target tarantool).")
     try:
         document = WitParser().parse(wit_path)
         selected = document.select_world(world)
@@ -264,6 +341,89 @@ def init(
     }
     _install_project_files(root, files, force=force, sources=source_paths)
     click.echo(f"Configuration saved to '{root / CONFIG_FILE}'.")
+
+
+@cli.group(name="tarantool")
+def tarantool_commands() -> None:
+    """Prepare Tarantool SDK/runtime inputs; execution belongs to the application."""
+
+
+@tarantool_commands.command(name="setup")
+@click.option(
+    "--runtime-platform",
+    type=click.Choice(["macos-arm64", "linux-x86_64"]),
+    default=None,
+)
+@click.option("--sdk-only", is_flag=True)
+@click.option(
+    "--upgrade", is_flag=True, help="Explicitly replace a managed runtime platform."
+)
+@click.option("--dry-run", is_flag=True)
+def tarantool_setup(
+    runtime_platform: str | None, sdk_only: bool, upgrade: bool, dry_run: bool
+) -> None:
+    """Restore project-local SDK files and install the native wasm library."""
+    from tarawasm import tarantool
+
+    try:
+        conf = Config.load()
+        lock_path = conf.project_root / tarantool.LOCK
+        if not lock_path.is_file():
+            raise BackendError("Initialize this project with --target tarantool first.")
+        previous = tarantool.locked_files(conf, verify=False)
+        assert previous is not None
+        if sdk_only and runtime_platform:
+            raise BackendError("Use --sdk-only or --runtime-platform, not both.")
+        selected = (
+            None if sdk_only else (runtime_platform or previous["runtime_platform"])
+        )
+        if selected != previous.get("runtime_platform") and not upgrade:
+            raise BackendError(
+                "Changing the locked runtime platform requires --upgrade."
+            )
+        if dry_run:
+            click.echo(
+                f"Would restore Tarantool-Wasm {previous['version']}; runtime: {selected}."
+            )
+            return
+        tarantool.check_destinations(
+            conf.project_root,
+            {Path(p): b"" for p in [*previous["files"], str(tarantool.LOCK)]},
+        )
+        if selected == previous["runtime_platform"] and all(
+            (conf.project_root / path).is_file()
+            and hashlib.sha256((conf.project_root / path).read_bytes()).hexdigest()
+            == checksum
+            for path, checksum in previous["files"].items()
+        ):
+            click.echo("Tarantool SDK/runtime inputs are already ready.")
+            return
+        files = tarantool.environment_files(
+            conf.language, selected, previous["version"]
+        )
+        tarantool.check_destinations(conf.project_root, files)
+        updates = {}
+        for relative, content in files.items():
+            destination = conf.project_root / relative
+            if destination.exists():
+                current = destination.read_bytes()
+                if current == content:
+                    continue
+                expected = previous.get("files", {}).get(str(relative))
+                if (
+                    relative != tarantool.LOCK
+                    and hashlib.sha256(current).hexdigest() != expected
+                ):
+                    raise BackendError(
+                        f"Refusing to replace modified or unmanaged file: {relative}."
+                    )
+            updates[relative] = content
+        _install_project_files(conf.project_root, updates, force=True, sources=set())
+    except (ConfigError, BackendError, OSError, ValueError, ToolchainError) as exc:
+        raise _fail(exc)
+    click.echo(
+        "Tarantool SDK/runtime inputs are ready. Application files were preserved."
+    )
 
 
 @cli.command(name="import")
@@ -541,6 +701,9 @@ def bind(
             wit=resolved_wit,
             tool_args=list(tool_args),
         )
+        from tarawasm.tarantool import bind_commands
+
+        commands = bind_commands(conf, commands)
     except BackendError as exc:
         raise _fail(exc)
     if tool_help:
@@ -551,8 +714,11 @@ def bind(
         manifest = ArtifactManifest(conf.project_root, conf.state_dir)
         before = manifest.snapshot()
         try:
-            for command in commands:
-                _run(command, dry_run=dry_run)
+            with dependency_locks(conf):
+                for command in commands:
+                    _run(command, dry_run=dry_run)
+        except BackendError as exc:
+            raise _fail(exc)
         finally:
             if not dry_run:
                 manifest.record_created_since(before)
@@ -604,7 +770,10 @@ def build(
         raise _fail(exc)
     temporary_output = conf.build_dir / "publish" / f"{resolved_world}.wasm"
     try:
-        command = backend.build_command(
+        from tarawasm.tarantool import build_command, postprocess_commands
+
+        command = build_command(
+            backend,
             conf,
             world=resolved_world,
             wit=resolved_wit,
@@ -629,38 +798,45 @@ def build(
             )
             if finish:
                 _run(finish, dry_run=True)
+            for postprocess in postprocess_commands(conf, temporary_output):
+                _run(postprocess, dry_run=True)
             click.echo(f"Would publish verified component to {resolved_output}")
             return
         temporary_output.parent.mkdir(parents=True, exist_ok=True)
         temporary_output.unlink(missing_ok=True)
         try:
-            _run(command)
-            finish = backend.finish_build_command(
-                conf, world=resolved_world, output=temporary_output
-            )
-            if finish:
-                _run(finish)
-            built = backend.locate_artifact(conf, temporary_output)
-            if built != temporary_output:
-                if not built.is_file():
-                    raise click.ClickException(
-                        f"Build artifact '{built}' was not created."
-                    )
-                shutil.copyfile(built, temporary_output)
-            if not temporary_output.is_file():
-                raise click.ClickException(
-                    f"Build did not create expected artifact '{temporary_output}'."
+            with dependency_locks(conf):
+                _run(command)
+                finish = backend.finish_build_command(
+                    conf, world=resolved_world, output=temporary_output
                 )
-            try:
-                WitParser().parse(temporary_output)
-            except WitError as exc:
-                raise click.ClickException(
-                    f"Build output is not a valid WebAssembly component: {exc}"
-                ) from exc
+                if finish:
+                    _run(finish)
+                built = backend.locate_artifact(conf, temporary_output)
+                if built != temporary_output:
+                    if not built.is_file():
+                        raise click.ClickException(
+                            f"Build artifact '{built}' was not created."
+                        )
+                    shutil.copyfile(built, temporary_output)
+                if not temporary_output.is_file():
+                    raise click.ClickException(
+                        f"Build did not create expected artifact '{temporary_output}'."
+                    )
+                for postprocess in postprocess_commands(conf, temporary_output):
+                    _run(postprocess)
+                try:
+                    WitParser().parse(temporary_output)
+                except WitError as exc:
+                    raise click.ClickException(
+                        f"Build output is not a valid WebAssembly component: {exc}"
+                    ) from exc
             resolved_output.parent.mkdir(parents=True, exist_ok=True)
             _publish_component(temporary_output, resolved_output)
             manifest.record(resolved_output)
             click.echo(f"Built {resolved_output}")
+        except BackendError as exc:
+            raise _fail(exc)
         finally:
             manifest.record_created_since(before)
 
