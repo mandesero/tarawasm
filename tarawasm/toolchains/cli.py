@@ -8,7 +8,7 @@ from pathlib import Path
 
 import click
 
-from tarawasm.config import ConfigError, discover_config
+from tarawasm.config import Config, ConfigError, discover_config
 
 from .catalog import CATALOG, LANGUAGES, TOOLS, default_image, tools_for
 from .discovery import discover_local, docker_available, inspect_profile
@@ -121,6 +121,16 @@ def doctor(language: str | None, all_languages: bool, as_json: bool) -> None:
         report_for(item, project_root())
         for item in ([language] if language else LANGUAGES)
     ]
+    try:
+        conf = Config.load()
+    except ConfigError:
+        pass
+    else:
+        from tarawasm.tarantool import inspect_inputs
+
+        for report in reports:
+            if report["language"] == conf.language:
+                inspect_inputs(conf, report)
     emit_reports(reports, as_json)
     if not all(report["ready"] for report in reports):
         raise click.exceptions.Exit(1)

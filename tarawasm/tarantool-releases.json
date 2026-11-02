@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "default": "0.1.0",
+  "paths": {
+    "lock": "tarawasm.tarantool.lock.json",
+    "sdk": ".tarawasm/tarantool",
+    "runtime": ".rocks/lib/tarantool/wasm.so"
+  },
+  "base_url": "https://github.com/tarantool/tarantool-wasm-rs/releases/download",
+  "releases": {
+    "0.1.0": {
+      "go_module": "github.com/tarantool/tarantool-wasm-rs/guests/go",
+      "wit_package": "tarantool:tarantool@0.2.0",
+      "checksums": {
+        "sdk.tar.gz": "7fed52ae5edb6309e5a45e2eacc185d9437752f423076f482f307cb6f779850e",
+        "linux-x86_64.so": "65866215ce6424389381644ef65adc3906f896d46a03843f213baf16df758585",
+        "macos-arm64.dylib": "bf2960db7dfe3535f7b6facecd2b33c4dbd9479f90b691e1b964a2499ef5a38d"
+      },
+      "includes": {
+        "python": [
+          "tarantool:tarantool/guest@0.2.0"
+        ],
+        "js": [
+          "tarantool:tarantool/guest@0.2.0"
+        ],
+        "go": [
+          "tarantool:tarantool/guest@0.2.0",
+          "wasi:cli/imports@0.2.12"
+        ],
+        "rust": [],
+        "csharp": [],
+        "c": [
+          "tarantool:tarantool/guest@0.2.0"
+        ]
+      },
+      "minimum_tools": {
+        "python": [
+          "componentize-py",
+          "0.25.1"
+        ],
+        "go": [
+          "tinygo",
+          "0.43.0"
+        ],
+        "rust": [
+          "rustc",
+          "1.96.0"
+        ]
+      },
+      "msgpack": {
+        "url": "https://files.pythonhosted.org/packages/61/3c/2206f39880d38ca7ad8ac1b28d2d5ca81632d163b2d68ef90e46409ca057/msgpack-1.0.3.tar.gz",
+        "sha256": "51fdc7fb93615286428ee7758cecc2f374d5ff363bdd884c7ea622a7a327a81e",
+        "directory": "msgpack-1.0.3"
+      },
+      "go_version": "0.1.0",
+      "nuget_version": "0.1.0",
+      "python": {
+        "ssl_import": "docs:adder/ssl-bio@0.1.3",
+        "ports": [
+          "ssl",
+          "asyncio_dns"
+        ],
+        "patch_socket_errors": "twr_python_sdk/_guest/patch_wasi_socket_errors.py"
+      }
+    }
+  }
+}
