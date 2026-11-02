@@ -128,6 +128,31 @@ tarawasm build
 `import` extracts the component's WIT and creates a new implementation project.
 It leaves the input binary untouched. Core WebAssembly modules are not accepted.
 
+### Build for Tarantool
+
+```sh
+tarawasm init --target tarantool --lang python \
+  --package example:app@0.1.0 --world app ./app
+cd app
+# Define exports in wit/app.wit and implement them in main.py.
+tarawasm bind
+tarawasm build
+```
+
+The initial world contains only the SDK imports, with no application exports.
+The result is `dist/app.wasm`; load it from your Tarantool application using
+`require('wasm')`. The native module is installed at
+`.rocks/lib/tarantool/wasm.so`. After checkout, restore SDK/runtime inputs with
+`tarawasm tarantool setup`.
+
+SDKs support Python, JavaScript, Go, Rust and C#. C# requires Linux amd64;
+Go requires TinyGo 0.43+. Native modules support Linux x86-64 and macOS arm64
+with Tarantool 3.6+. Python initializes SDK SSL and asyncio DNS automatically.
+TLS needs host OpenSSL 3; builds are stripped for the SDK socket fix.
+The runtime defaults to the CLI host; use
+`--runtime-platform linux-x86_64` for Linux deployment.
+See [Tarantool usage and release updates](docs/tarantool.md) for other options.
+
 ### Everyday commands
 
 | Command | Purpose |
