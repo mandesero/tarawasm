@@ -1,9 +1,14 @@
 """Released SDK + application-owned WIT exports + real Tarantool database calls."""
 
+import http.server
 import json
 import os
 import shutil
+import ssl
 import subprocess
+import sys
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -54,12 +59,40 @@ if arg[2] == 'extended' then
     assert(api.get(7).name == 'Bob')
 end
 assert(wasm.drop(module))
+if arg[2] == 'extended' and arg[3] == 'python' then
+    local function request(bundle, expose)
+        local options = {
+            inherit_env = false,
+            env = {SSL_CERT_FILE = '/certs/' .. bundle},
+            allowed_ports = {tonumber(arg[5])},
+            allow_ip_name_lookup = true,
+        }
+        if expose then options.preopened_dirs = {{'./ca', '/certs', perms = 'ro'}} end
+        local client = wasm.load('dist/user-service.wasm', options)
+        local result = wasm.bind(client)['https-get'](arg[4])
+        assert(wasm.drop(client))
+        return result
+    end
+    assert(request('ca.pem', true) == 'urllib3 HTTPS OK')
+    assert(request('wrong.pem', true) == 'certificate-rejected')
+    assert(request('ca.pem', false) == 'certificate-rejected')
+end
 print('Tarantool application OK')
 os.exit(0)
 """
 SOURCES = {
     "python": """import wit_world
 from twr_python_sdk import tarantool
+
+# These stdlib dependencies must exist when urllib3 is imported at runtime.
+import hmac
+import importlib.metadata
+import json
+import mimetypes
+import queue
+import zlib
+
+twr_python_sdk.freeze_packages("urllib3")
 
 class WitWorld(wit_world.WitWorld):
     def create_user(self, id: int, name: str) -> str:
@@ -90,6 +123,22 @@ class WitWorld(wit_world.WitWorld):
             return any(address[4] == ("127.0.0.1", 443) for address in addresses)
 
         return asyncio.run(lookup())
+
+    def https_get(self, url: str) -> str:
+        import ssl
+        import urllib3
+
+        try:
+            with urllib3.PoolManager() as http:
+                response = http.request(
+                    "GET", url, retries=False,
+                    timeout=urllib3.Timeout(connect=5, read=5),
+                )
+                return response.data.decode("utf-8")
+        except urllib3.exceptions.SSLError as error:
+            if isinstance(error.args[0], ssl.SSLCertVerificationError):
+                return "certificate-rejected"
+            raise
 """,
     "js": """import {box} from './.tarawasm/tarantool/js/src/index.js';
 export function createUser(id, name) {
@@ -215,10 +264,14 @@ def invoke(project, mode, *args):
         run_cli(project, *args, mode=mode)
 
 
-def run_application(project, mode, phase):
+def run_application(project, mode, phase, https_port=None):
     (project / phase).mkdir()
     (project / "check.lua").write_text(LUA)
     language = json.loads((project / LOCK).read_text())["language"]
+    arguments = ["check.lua", phase, phase, language]
+    if https_port is not None:
+        host = "host.docker.internal" if mode == "docker" else "localhost"
+        arguments += [f"https://{host}:{https_port}/", str(https_port)]
     if mode == "docker":
         cmd = [
             "docker",
@@ -226,6 +279,11 @@ def run_application(project, mode, phase):
             "--rm",
             "--platform",
             "linux/amd64",
+            *(
+                ["--add-host", "host.docker.internal:host-gateway"]
+                if https_port
+                else []
+            ),
             "-v",
             f"{project}:/work",
             "-w",
@@ -238,18 +296,133 @@ def run_application(project, mode, phase):
             "-u",
             "TT_INSTANCE_NAME",
             "tarantool",
-            "check.lua",
-            phase,
-            phase,
-            language,
+            *arguments,
         ]
     else:
-        cmd = ["tarantool", "check.lua", phase, phase, language]
+        cmd = ["tarantool", *arguments]
     result = subprocess.run(
         cmd, cwd=project, check=False, text=True, capture_output=True, timeout=180
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "Tarantool application OK" in result.stdout
+
+
+@contextmanager
+def https_server(project, mode):
+    """Serve a fixed response with a fresh CA/leaf pair, without public DNS."""
+    private = project / "tls"
+    private.mkdir()
+    ca = project / "ca"
+    ca.mkdir()
+    (private / "server.ext").write_text(
+        "basicConstraints=critical,CA:FALSE\n"
+        "keyUsage=critical,digitalSignature,keyEncipherment\n"
+        "extendedKeyUsage=serverAuth\n"
+        "subjectAltName=DNS:localhost,DNS:host.docker.internal,IP:127.0.0.1\n"
+        "subjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid,issuer\n"
+    )
+    openssl = shutil.which("openssl")
+    assert openssl, "OpenSSL executable is required to generate HTTPS test certificates"
+    for name in ("ca", "wrong"):
+        subprocess.run(
+            [
+                openssl,
+                "req",
+                "-x509",
+                "-newkey",
+                "rsa:2048",
+                "-nodes",
+                "-keyout",
+                str(private / f"{name}.key"),
+                "-out",
+                str(ca / f"{name}.pem"),
+                "-days",
+                "1",
+                "-subj",
+                f"/CN=Tarawasm {name}",
+                "-addext",
+                "basicConstraints=critical,CA:TRUE",
+                "-addext",
+                "keyUsage=critical,keyCertSign,cRLSign",
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    subprocess.run(
+        [
+            openssl,
+            "req",
+            "-new",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-keyout",
+            str(private / "server.key"),
+            "-out",
+            str(private / "server.csr"),
+            "-subj",
+            "/CN=localhost",
+        ],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    subprocess.run(
+        [
+            openssl,
+            "x509",
+            "-req",
+            "-in",
+            str(private / "server.csr"),
+            "-CA",
+            str(ca / "ca.pem"),
+            "-CAkey",
+            str(private / "ca.key"),
+            "-CAcreateserial",
+            "-out",
+            str(private / "server.pem"),
+            "-days",
+            "1",
+            "-extfile",
+            str(private / "server.ext"),
+        ],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        timeout = 5
+
+        def do_GET(self):
+            body = b"urllib3 HTTPS OK"
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(
+        ("0.0.0.0" if mode == "docker" else "127.0.0.1", 0), Handler
+    )
+    try:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(private / "server.pem", private / "server.key")
+        server.socket = context.wrap_socket(
+            server.socket, server_side=True, do_handshake_on_connect=False
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            yield server.server_port
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+    finally:
+        server.server_close()
 
 
 def exercise(tmp_path, language, mode):
@@ -285,6 +458,7 @@ def exercise(tmp_path, language, mode):
             f"world {WORLD} {{\n  export create-user: func(id: u32, name: string) -> string;"
             + (
                 "\n  export ssl-ready: func() -> bool;\n  export dns-ready: func() -> bool;"
+                "\n  export https-get: func(url: string) -> string;"
                 if language == "python"
                 else ""
             ),
@@ -296,6 +470,22 @@ def exercise(tmp_path, language, mode):
         source.parent.mkdir(exist_ok=True)
     content = SOURCES[language]
     if language == "python":
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--no-deps",
+                "--only-binary=:all:",
+                "--require-hashes",
+                "--target",
+                str(project / ".tarawasm/site-packages"),
+                "-r",
+                str(ROOT / "tests/requirements-tarantool-python.txt"),
+            ],
+            check=True,
+        )
         bootstrap = source.read_text().partition("import wit_world")[0]
         python_spec = release(json.loads((project / LOCK).read_text())["version"]).get(
             "python", {}
@@ -306,7 +496,12 @@ def exercise(tmp_path, language, mode):
     source.write_text(content)
     invoke(project, mode, "clean")
     invoke(project, mode, "bind")
-    invoke(project, mode, "build")
+    build_args = (
+        ["--", "--python-path", ".tarawasm/site-packages"]
+        if language == "python"
+        else []
+    )
+    invoke(project, mode, "build", *build_args)
     run_application(project, mode, "initial")
     if language == "python":
         version = json.loads((project / LOCK).read_text())["version"]
@@ -368,8 +563,12 @@ def exercise(tmp_path, language, mode):
     assert (project / RUNTIME).read_bytes() == runtime
     assert (project / SDK).is_dir()
     invoke(project, mode, "bind")
-    invoke(project, mode, "build")
-    run_application(project, mode, "extended")
+    invoke(project, mode, "build", *build_args)
+    if language == "python":
+        with https_server(project, mode) as port:
+            run_application(project, mode, "extended", https_port=port)
+    else:
+        run_application(project, mode, "extended")
     assert all(path.read_bytes() == data for path, data in sources.items())
     assert all((project / path).read_bytes() == data for path, data in locks.items())
 
