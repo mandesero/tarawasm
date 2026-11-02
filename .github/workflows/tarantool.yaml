@@ -1,0 +1,78 @@
+name: Tarantool integration
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sdk:
+    name: ${{ matrix.language }} / Ubuntu
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, js, go, rust, csharp]
+    env:
+      SDK_LANGUAGE: ${{ matrix.language }}
+      PYTHONPATH: ${{ github.workspace }}
+      TARAWASM_TARANTOOL_IT: "1"
+      TARAWASM_DATA_HOME: ${{ github.workspace }}/target/ci-toolchains
+      TARAWASM_CONFIG_HOME: ${{ github.workspace }}/target/ci-config
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: "3.13"
+      - name: Install test dependencies
+        run: python -m pip install -r requirements.txt pytest
+      - uses: tarantool/setup-tarantool@v4
+        with:
+          tarantool-version: "3.7.0"
+      - name: Cache language toolchain
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.TARAWASM_DATA_HOME }}
+          key: tarantool-${{ runner.os }}-${{ runner.arch }}-${{ matrix.language }}-py${{ steps.python.outputs.python-version }}-${{ hashFiles('tarawasm/toolchains/**', 'tarawasm/csharp.py') }}
+      - name: Prepare selected language toolchain
+        run: |
+          python -m tarawasm.cli toolchain setup "$SDK_LANGUAGE" --mode local --install --yes --upgrade
+          python - <<'PY' >> "$GITHUB_ENV"
+          import sys
+          from tarawasm.toolchains.discovery import managed_environment
+          print(f"CI_PYTHON={sys.executable}")
+          env = managed_environment()
+          for key in ("PATH", "CARGO_HOME", "RUSTUP_HOME", "WASI_SDK_PATH"):
+              if key in env:
+                  print(f"{key}={env[key]}")
+          PY
+      - name: Test Tarantool installation contracts
+        if: matrix.language == 'python'
+        run: '"$CI_PYTHON" -m pytest tests/test_tarantool.py -vv -ra --junitxml="$RUNNER_TEMP/tarantool-unit.xml"'
+      - name: Test SDK and application-defined WIT against Tarantool
+        run: |
+          tarantool --version
+          "$CI_PYTHON" -m pytest "tests/test_tarantool_integration.py::test_tarantool_sdk_and_user_defined_wit[lang:$SDK_LANGUAGE-cli:python]" -vv -ra --junitxml="$RUNNER_TEMP/tarantool-sdk.xml"
+          "$CI_PYTHON" - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+          case, = ET.parse(os.path.join(os.environ["RUNNER_TEMP"], "tarantool-sdk.xml")).iter("testcase")
+          assert case.find("skipped") is None, ET.tostring(case, encoding="unicode")
+          PY
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tarantool-${{ matrix.language }}
+          path: ${{ runner.temp }}/tarantool-*.xml
+          if-no-files-found: ignore
