@@ -19,6 +19,8 @@ use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   diagnostics in `doctor`.
 - Automatic SSL and asyncio name resolution for Python Tarantool projects,
   including the SDK's socket-error compatibility fix during builds.
+- Tarantool usage guide with examples for SDK setup, deferred Python imports
+  and HTTPS CA configuration.
 
 ### Fixed
 
